@@ -1,13 +1,17 @@
 {
   "domain": "tonewatch",
   "name": "ToneWatch",
-  "version": "0.1.0",
-  "documentation": "https://github.com/JustBeanie/ha-tonewatch",
-  "issue_tracker": "https://github.com/JustBeanie/ha-tonewatch/issues",
-  "codeowners": ["@JustBeanie"],
+  "codeowners": [
+    "@JustBeanie"
+  ],
   "config_flow": true,
-  "iot_class": "local_push",
+  "documentation": "https://github.com/JustBeanie/ha-tonewatch",
   "integration_type": "service",
-  "zeroconf": ["_tonewatch._tcp.local."],
-  "requirements": []
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/JustBeanie/ha-tonewatch/issues",
+  "requirements": [],
+  "version": "0.1.0",
+  "zeroconf": [
+    "_tonewatch._tcp.local."
+  ]
 }

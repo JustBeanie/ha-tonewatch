@@ -45,4 +45,5 @@ ignore_missing_imports = true
 addopts = "--strict-markers -W error --allow-unix-socket --cov=custom_components/tonewatch --cov-fail-under=90 --cov-report=term-missing"
 asyncio_mode = "auto"
 testpaths = ["tests"]
+pythonpath = ["."]
 markers = ["allow_unregistered: test config flow without registering a real integration"]
