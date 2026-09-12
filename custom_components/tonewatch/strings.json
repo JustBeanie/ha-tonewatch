@@ -1,0 +1,38 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to ToneWatch",
+        "description": "Enter the ToneWatch host, port, and API token.",
+        "data": {
+          "host": "Host",
+          "port": "Port",
+          "api_token": "API token"
+        }
+      },
+      "zeroconf_confirm": {
+        "title": "Confirm ToneWatch",
+        "description": "Enter the API token for the discovered ToneWatch instance.",
+        "data": {"api_token": "API token"}
+      },
+      "hassio_confirm": {
+        "title": "Confirm ToneWatch add-on",
+        "description": "Enter the API token for the discovered ToneWatch add-on.",
+        "data": {"api_token": "API token"}
+      },
+      "reauth_confirm": {
+        "title": "Reauthenticate ToneWatch",
+        "description": "Enter a replacement API token.",
+        "data": {"api_token": "API token"}
+      }
+    },
+    "error": {
+      "cannot_connect": "Unable to connect to ToneWatch.",
+      "invalid_auth": "The API token is invalid."
+    },
+    "abort": {
+      "already_configured": "This ToneWatch instance is already configured.",
+      "reauth_successful": "Reauthentication successful."
+    }
+  }
+}

@@ -1,0 +1,48 @@
+[project]
+name = "ha-tonewatch"
+version = "0.1.0"
+description = "Home Assistant custom integration for ToneWatch"
+requires-python = ">=3.13.2,<3.14"
+dependencies = [
+  "homeassistant==2026.2.3",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.3",
+  "pytest-asyncio>=0.24",
+  "pytest-cov>=6.0",
+  "pytest-homeassistant-custom-component==0.13.316",
+  "mypy>=1.13",
+  "ruff>=0.8",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "N", "UP", "B", "A", "C4", "DTZ", "T20", "SIM", "PTH", "RUF", "S", "ASYNC", "PL", "PERF", "FURB", "TRY", "RET", "ARG", "ERA", "TC", "D"]
+ignore = ["D203", "D213"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "PLR2004", "D"]
+"custom_components/tonewatch/*.py" = ["D", "PLR", "TRY003", "TRY301", "ASYNC240", "B008", "ARG", "PTH", "TC001", "TC002", "TC003"]
+
+[tool.mypy]
+strict = true
+mypy_path = "."
+plugins = []
+
+[[tool.mypy.overrides]]
+module = ["homeassistant.*", "aiohttp.*", "voluptuous.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+addopts = "--strict-markers -W error --allow-unix-socket --cov=custom_components/tonewatch --cov-fail-under=90 --cov-report=term-missing"
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = ["allow_unregistered: test config flow without registering a real integration"]
