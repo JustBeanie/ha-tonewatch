@@ -8,7 +8,7 @@ from uuid import UUID
 
 import pytest
 from homeassistant.config_entries import ConfigEntryState
-from homeassistant.const import Platform
+from homeassistant.const import ATTR_RESTORED, STATE_UNAVAILABLE, Platform
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -162,7 +162,9 @@ async def test_setup_creates_expected_entities_and_unloads(
     await hass.async_block_till_done()
     assert entry.state is ConfigEntryState.NOT_LOADED
     leftover = [entity_id for entity_id in entity_ids if hass.states.get(entity_id)]
-    assert not leftover, leftover
+    assert leftover == entity_ids
+    assert all(hass.states.get(entity_id).state == STATE_UNAVAILABLE for entity_id in leftover)
+    assert all(hass.states.get(entity_id).attributes[ATTR_RESTORED] for entity_id in leftover)
     await hass.config_entries.async_remove(entry.entry_id)
     await hass.async_block_till_done()
     assert not er.async_entries_for_config_entry(registry, entry.entry_id)
