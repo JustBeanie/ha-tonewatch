@@ -6,6 +6,7 @@ from typing import Any
 from uuid import UUID
 
 import pytest
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import Platform
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -131,6 +132,7 @@ async def test_setup_creates_expected_entities_and_unloads(
     await hass.async_block_till_done()
     registry = er.async_get(hass)
     entities = er.async_entries_for_config_entry(registry, entry.entry_id)
+    entity_ids = [item.entity_id for item in entities]
     assert {item.unique_id for item in entities} == {
         "instance-1_event_ems",
         "instance-1_event_fire",
@@ -156,6 +158,10 @@ async def test_setup_creates_expected_entities_and_unloads(
         }
     }
     assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.NOT_LOADED
+    assert all(hass.states.get(entity_id) is None for entity_id in entity_ids)
+    await hass.config_entries.async_remove(entry.entry_id)
     await hass.async_block_till_done()
     assert not er.async_entries_for_config_entry(registry, entry.entry_id)
 
@@ -185,12 +191,10 @@ async def test_push_events_update_entities_and_fire_bus(
         }
     )
     await hass.async_block_till_done()
-    event_state = hass.states.get("event.ems")
-    call_active_state = hass.states.get("binary_sensor.call_active")
-    last_call_state = hass.states.get("sensor.last_call")
-    assert event_state is not None
-    assert call_active_state is not None
-    assert last_call_state is not None
+    registry = er.async_get(hass)
+    event_state = _state_for(hass, registry, "event", "instance-1_event_ems")
+    call_active_state = _state_for(hass, registry, "binary_sensor", "instance-1_call_active")
+    last_call_state = _state_for(hass, registry, "sensor", "instance-1_last_call")
     assert event_state.attributes["call_id"] == call_id
     assert event_state.state == "pre_alert"
     assert call_active_state.state == "on"
@@ -210,8 +214,7 @@ async def test_push_events_update_entities_and_fire_bus(
         }
     )
     await hass.async_block_till_done()
-    event_state = hass.states.get("event.ems")
-    assert event_state is not None
+    event_state = _state_for(hass, registry, "event", "instance-1_event_ems")
     assert event_state.state == "recording_ready"
     assert (
         event_state.attributes["recording_url"]
@@ -231,16 +234,14 @@ async def test_feed_switch_button_disconnect_and_secret_redaction(
         {"type": "FeedHealthChanged", "data": {"source_id": "north", "healthy": False}}
     )
     await hass.async_block_till_done()
-    north_state = hass.states.get("binary_sensor.feed_healthy_north")
-    south_state = hass.states.get("binary_sensor.feed_healthy_south")
-    assert north_state is not None
-    assert south_state is not None
+    registry = er.async_get(hass)
+    north_state = _state_for(hass, registry, "binary_sensor", "instance-1_feed_healthy_north")
+    south_state = _state_for(hass, registry, "binary_sensor", "instance-1_feed_healthy_south")
     assert north_state.state == "off"
     assert south_state.state == "off"
     coordinator.async_set_update_error(RuntimeError("disconnected"))
     await hass.async_block_till_done()
-    event_state = hass.states.get("event.ems")
-    assert event_state is not None
+    event_state = _state_for(hass, registry, "event", "instance-1_event_ems")
     assert event_state.state == "unavailable"
     assert TOKEN not in str(hass.states.async_all())
 
@@ -248,6 +249,14 @@ async def test_feed_switch_button_disconnect_and_secret_redaction(
 async def _start(coordinator: Any, state: dict[str, Any]) -> None:
     coordinator.latest_state = state
     coordinator.async_set_updated_data(state)
+
+
+def _state_for(hass: Any, registry: Any, domain: str, unique_id: str) -> Any:
+    entity_id = registry.async_get_entity_id(domain, DOMAIN, unique_id)
+    assert entity_id is not None
+    state = hass.states.get(entity_id)
+    assert state is not None
+    return state
 
 
 async def _setup(
