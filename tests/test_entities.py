@@ -161,7 +161,8 @@ async def test_setup_creates_expected_entities_and_unloads(
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
     assert entry.state is ConfigEntryState.NOT_LOADED
-    assert all(hass.states.get(entity_id) is None for entity_id in entity_ids)
+    leftover = [entity_id for entity_id in entity_ids if hass.states.get(entity_id)]
+    assert not leftover, leftover
     await hass.config_entries.async_remove(entry.entry_id)
     await hass.async_block_till_done()
     assert not er.async_entries_for_config_entry(registry, entry.entry_id)
@@ -223,6 +224,70 @@ async def test_push_events_update_entities_and_fire_bus(
         event_state.attributes["recording_url"]
         == "http://tonewatch.local:8099/api/recordings/call.mp3"
     )
+    await coordinator._handle_message(
+        {
+            "type": "RecordingReady",
+            "data": {
+                "call_id": "22345678-1234-5678-1234-567812345678",
+                "path": "call.mp3",
+                "format": "mp3",
+            },
+        }
+    )
+    await hass.async_block_till_done()
+    event_state = _state_for(hass, registry, "event", "instance-1_event_ems")
+    assert event_state.attributes["recording_url"] == (
+        "http://tonewatch.local:8099/api/recordings/call.mp3"
+    )
+    await coordinator._handle_message(
+        {
+            "type": "RecordingReady",
+            "data": {
+                "call_id": "32345678-1234-5678-1234-567812345678",
+                "path": "https://media.example/call.mp3",
+                "format": "mp3",
+            },
+        }
+    )
+    await hass.async_block_till_done()
+    event_state = _state_for(hass, registry, "event", "instance-1_event_ems")
+    assert event_state.attributes["recording_url"] == "https://media.example/call.mp3"
+
+
+async def test_switch_write_reverts_and_button_posts(
+    hass: Any,
+    entry: MockConfigEntry,
+    initial_state: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entry.add_to_hass(hass)
+    coordinator = await _setup(hass, entry, initial_state, monkeypatch, api)
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    fail_write = True
+
+    async def fake_request(method: str, path: str, *, json: dict[str, Any] | None = None) -> Any:
+        calls.append((method, path, json))
+        if fail_write:
+            raise RuntimeError
+        return {"ok": True}
+
+    coordinator.async_request = fake_request
+    registry = er.async_get(hass)
+    switch_id = registry.async_get_entity_id("switch", DOMAIN, "instance-1_switch_ems")
+    button_id = registry.async_get_entity_id("button", DOMAIN, "instance-1_button_ems")
+    assert switch_id is not None
+    assert button_id is not None
+    with pytest.raises(RuntimeError):
+        await hass.services.async_call(
+            "switch", "turn_off", {"entity_id": switch_id}, blocking=True
+        )
+    assert _state_for(hass, registry, "switch", "instance-1_switch_ems").state == "on"
+    fail_write = False
+    await hass.services.async_call("switch", "turn_off", {"entity_id": switch_id}, blocking=True)
+    await hass.services.async_call("button", "press", {"entity_id": button_id}, blocking=True)
+    assert calls[0][:2] == ("PUT", "/api/tonesets/ems")
+    assert calls[1][:2] == ("PUT", "/api/tonesets/ems")
+    assert calls[2][:2] == ("POST", "/api/tonesets/ems/test")
 
 
 async def test_feed_switch_button_disconnect_and_secret_redaction(
