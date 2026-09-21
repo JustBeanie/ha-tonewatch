@@ -20,7 +20,7 @@ class ToneWatchEntity(CoordinatorEntity[ToneWatchCoordinator]):
         self.item_id = item_id
         instance_id = coordinator.entry.data.get("instance_id", coordinator.entry.entry_id)
         instance_label = str(instance_id)
-        self._attr_unique_id = f"{instance_id}_{kind}_{item_id}"
+        self._attr_unique_id = "_".join(part for part in (str(instance_id), kind, item_id) if part)
         self._attr_device_info = {
             "identifiers": {
                 (

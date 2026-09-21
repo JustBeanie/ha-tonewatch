@@ -185,10 +185,16 @@ async def test_push_events_update_entities_and_fire_bus(
         }
     )
     await hass.async_block_till_done()
-    assert hass.states["event.ems"].attributes["call_id"] == call_id
-    assert hass.states["event.ems"].state == "pre_alert"
-    assert hass.states["binary_sensor.call_active"].state == "on"
-    assert hass.states["sensor.last_call"].attributes["source_id"] == "north"
+    event_state = hass.states.get("event.ems")
+    call_active_state = hass.states.get("binary_sensor.call_active")
+    last_call_state = hass.states.get("sensor.last_call")
+    assert event_state is not None
+    assert call_active_state is not None
+    assert last_call_state is not None
+    assert event_state.attributes["call_id"] == call_id
+    assert event_state.state == "pre_alert"
+    assert call_active_state.state == "on"
+    assert last_call_state.attributes["source_id"] == "north"
     assert len(received) == 1
     assert received[0].data["call_id"] == call_id
     await coordinator._handle_message(
@@ -204,9 +210,11 @@ async def test_push_events_update_entities_and_fire_bus(
         }
     )
     await hass.async_block_till_done()
-    assert hass.states["event.ems"].state == "recording_ready"
+    event_state = hass.states.get("event.ems")
+    assert event_state is not None
+    assert event_state.state == "recording_ready"
     assert (
-        hass.states["event.ems"].attributes["recording_url"]
+        event_state.attributes["recording_url"]
         == "http://tonewatch.local:8099/api/recordings/call.mp3"
     )
 
@@ -223,11 +231,17 @@ async def test_feed_switch_button_disconnect_and_secret_redaction(
         {"type": "FeedHealthChanged", "data": {"source_id": "north", "healthy": False}}
     )
     await hass.async_block_till_done()
-    assert hass.states["binary_sensor.feed_healthy_north"].state == "off"
-    assert hass.states["binary_sensor.feed_healthy_south"].state == "off"
+    north_state = hass.states.get("binary_sensor.feed_healthy_north")
+    south_state = hass.states.get("binary_sensor.feed_healthy_south")
+    assert north_state is not None
+    assert south_state is not None
+    assert north_state.state == "off"
+    assert south_state.state == "off"
     coordinator.async_set_update_error(RuntimeError("disconnected"))
     await hass.async_block_till_done()
-    assert hass.states["event.ems"].state == "unavailable"
+    event_state = hass.states.get("event.ems")
+    assert event_state is not None
+    assert event_state.state == "unavailable"
     assert TOKEN not in str(hass.states.async_all())
 
 
