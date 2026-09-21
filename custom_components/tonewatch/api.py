@@ -68,6 +68,51 @@ class ToneWatchCoordinator(DataUpdateCoordinator[EventData]):
         self._stopped = asyncio.Event()
         self.latest_state: EventData = {"events": [], "last_event": None, "by_type": {}}
 
+    async def _async_api_json(
+        self, method: str, path: str, *, json: dict[str, Any] | None = None
+    ) -> Any:
+        """Make an authenticated API request without exposing credentials."""
+        session = async_get_clientsession(self.hass)
+        async with session.request(
+            method,
+            f"{self.base_url}{path}",
+            headers={"Authorization": self.authorization},
+            json=json,
+        ) as response:
+            response.raise_for_status()
+            return await response.json()
+
+    async def async_request(
+        self, method: str, path: str, *, json: dict[str, Any] | None = None
+    ) -> Any:
+        """Expose authenticated REST writes to entities."""
+        return await self._async_api_json(method, path, json=json)
+
+    async def _async_initial_fetch(self) -> None:
+        """Hydrate configuration and health once before the push stream starts."""
+        tonesets = await self._async_api_json("GET", "/api/tonesets")
+        health = await self._async_api_json("GET", "/api/admin/health")
+        sources = health if isinstance(health, list) else health.get("sources", [])
+        health_by_source = {
+            str(item["id"]): bool(item["feed_health_history"][-1]["healthy"])
+            if item.get("feed_health_history")
+            else None
+            for item in sources
+            if isinstance(item, dict) and item.get("id") is not None
+        }
+        self.latest_state.update(
+            {
+                "tonesets": tonesets if isinstance(tonesets, list) else [],
+                "sources": sources if isinstance(sources, list) else [],
+                "health": {
+                    source_id: value
+                    for source_id, value in health_by_source.items()
+                    if value is not None
+                },
+            }
+        )
+        self.async_set_updated_data(self.latest_state)
+
     async def _async_no_poll(self) -> EventData:
         """Provide the coordinator's initial push-backed value."""
         return self.latest_state
@@ -91,6 +136,17 @@ class ToneWatchCoordinator(DataUpdateCoordinator[EventData]):
         """Start the reconnecting WebSocket task."""
         if self._task is None or self._task.done():
             self._stopped.clear()
+            try:
+                await self._async_initial_fetch()
+            except (
+                aiohttp.ClientError,
+                OSError,
+                RuntimeError,
+                TimeoutError,
+                AttributeError,
+            ) as err:
+                self.async_set_update_error(err)
+                _LOGGER.warning("ToneWatch initial fetch failed: %s", err)
             self._task = asyncio.create_task(self._run(), name=f"tonewatch-{self.entry.entry_id}")
 
     async def async_stop(self) -> None:
@@ -112,12 +168,14 @@ class ToneWatchCoordinator(DataUpdateCoordinator[EventData]):
                     headers={"Authorization": self.authorization},
                 ) as websocket:
                     await websocket.send_json({"type": "subscribe", "topics": EVENT_TOPICS})
+                    self.async_set_updated_data(self.latest_state)
                     await self._consume(websocket)
             except asyncio.CancelledError:
                 raise
             except (aiohttp.ClientError, OSError, RuntimeError, TimeoutError) as err:
                 if self._stopped.is_set():
                     return
+                self.async_set_update_error(err)
                 _LOGGER.warning("ToneWatch WebSocket disconnected: %s", err)
             if self._stopped.is_set():
                 return
@@ -155,4 +213,48 @@ class ToneWatchCoordinator(DataUpdateCoordinator[EventData]):
         if isinstance(by_type, dict) and isinstance(message_type, str):
             by_type[message_type] = event["data"]
         self.latest_state["last_event"] = event
+        self._apply_event(event)
         self.async_set_updated_data(self.latest_state)
+
+    def _apply_event(self, event: EventData) -> None:
+        """Apply a protocol event to the small state projection used by entities."""
+        data = event.get("data")
+        if not isinstance(data, dict):
+            return
+        event_type = event.get("type")
+        if event_type == "ToneDetected":
+            self.latest_state["call_active"] = True
+            self.latest_state["last_call"] = data
+            bus_data = {
+                key: data.get(key)
+                for key in ("call_id", "toneset_id", "source_id", "test", "drill")
+            }
+            bus_data["recording_url"] = self._recording_url(
+                data.get("recording_id") or data.get("path")
+            )
+            self.hass.bus.async_fire("tonewatch_detected", bus_data)
+        elif event_type == "RecordingReady":
+            self.latest_state["last_call"] = {**self.latest_state.get("last_call", {}), **data}
+        elif event_type == "CallClosed":
+            self.latest_state["call_active"] = False
+        elif event_type == "FeedHealthChanged":
+            health = self.latest_state.setdefault("health", {})
+            if isinstance(health, dict) and data.get("source_id") is not None:
+                health[str(data["source_id"])] = bool(data.get("healthy"))
+        elif event_type == "ConfigChanged":
+            self.hass.async_create_task(self._async_refresh_config())
+
+    async def _async_refresh_config(self) -> None:
+        """Refresh tone sets after a pushed configuration change."""
+        try:
+            tonesets = await self._async_api_json("GET", "/api/tonesets")
+        except (aiohttp.ClientError, OSError, RuntimeError, TimeoutError, AttributeError):
+            return
+        self.latest_state["tonesets"] = tonesets if isinstance(tonesets, list) else []
+        self.async_set_updated_data(self.latest_state)
+
+    def _recording_url(self, value: Any) -> str | None:
+        """Build a token-free absolute recording URL."""
+        if value in (None, ""):
+            return None
+        return f"{self.base_url}/api/recordings/{value}"
