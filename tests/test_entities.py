@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 from uuid import UUID
 
@@ -196,7 +197,8 @@ async def test_push_events_update_entities_and_fire_bus(
     call_active_state = _state_for(hass, registry, "binary_sensor", "instance-1_call_active")
     last_call_state = _state_for(hass, registry, "sensor", "instance-1_last_call")
     assert event_state.attributes["call_id"] == call_id
-    assert event_state.state == "pre_alert"
+    assert event_state.attributes["event_type"] == "pre_alert"
+    datetime.fromisoformat(event_state.state)
     assert call_active_state.state == "on"
     assert last_call_state.attributes["source_id"] == "north"
     assert len(received) == 1
@@ -215,7 +217,8 @@ async def test_push_events_update_entities_and_fire_bus(
     )
     await hass.async_block_till_done()
     event_state = _state_for(hass, registry, "event", "instance-1_event_ems")
-    assert event_state.state == "recording_ready"
+    assert event_state.attributes["event_type"] == "recording_ready"
+    datetime.fromisoformat(event_state.state)
     assert (
         event_state.attributes["recording_url"]
         == "http://tonewatch.local:8099/api/recordings/call.mp3"

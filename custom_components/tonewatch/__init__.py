@@ -27,15 +27,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ToneWatchConfigEntry) ->
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
     await coordinator.async_start()
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    entry.async_on_unload(coordinator.async_stop)
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ToneWatchConfigEntry) -> bool:
     """Unload a ToneWatch config entry."""
+    unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if not unloaded:
+        return False
     coordinator = hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
-    if coordinator is None:
-        return True
-    await coordinator.async_stop()
-    await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if coordinator is not None:
+        await coordinator.async_stop()
     return True
