@@ -15,3 +15,5 @@ EVENT_TOPICS = ["events"]
 PLATFORMS = ["event", "sensor", "binary_sensor", "switch", "button"]
 BASE_BACKOFF = 1.0
 MAX_BACKOFF = 60.0
+MIN_APP_VERSION = "0.6.0"
+DISCONNECT_REPAIR_AFTER = 300.0

@@ -1,0 +1,32 @@
+blueprint:
+  name: ToneWatch - play dispatch audio
+  description: Play a ToneWatch recording on a selected media player when a tone set reports recording_ready.
+  domain: automation
+  source_url: https://github.com/JustBeanie/ha-tonewatch/blob/main/blueprints/automation/tonewatch/play_dispatch_audio.yaml
+  input:
+    tone_set_event:
+      name: Tone set event entity
+      description: The ToneWatch event entity for the tone set to monitor.
+      selector:
+        entity:
+          domain: event
+          integration: tonewatch
+    media_player:
+      name: Media player
+      description: The player that should play the dispatch recording.
+      selector:
+        entity:
+          domain: media_player
+trigger:
+  - platform: state
+    entity_id: !input tone_set_event
+    to: recording_ready
+action:
+  - service: media_player.play_media
+    target:
+      entity_id: !input media_player
+    data:
+      media_content_id: "{{ trigger.to_state.attributes.recording_proxy_url | default(trigger.to_state.attributes.recording_url) }}"
+      media_content_type: audio/mpeg
+mode: queued
+max: 10

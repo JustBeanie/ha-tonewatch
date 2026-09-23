@@ -10,6 +10,7 @@ from homeassistant.core import HomeAssistant
 
 from .api import ToneWatchCoordinator
 from .entity import ToneWatchEntity
+from .urls import recording_url
 
 
 async def async_setup_entry(
@@ -44,7 +45,10 @@ class ToneWatchEvent(ToneWatchEntity, EventEntity):
         ):
             self._last_triggered = (data.get("call_id"), event_type)
             attrs = {key: data.get(key) for key in ("call_id", "toneset_id", "test", "drill")}
-            attrs["recording_url"] = self._recording_url(
+            attrs["recording_url"] = recording_url(
+                self.coordinator.base_url, data.get("recording_id") or data.get("path")
+            )
+            attrs["recording_proxy_url"] = self._recording_proxy_url(
                 data.get("recording_id") or data.get("path")
             )
             self._trigger_event(
@@ -55,10 +59,18 @@ class ToneWatchEvent(ToneWatchEntity, EventEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         data = self._event_data()
+        recording = data.get("recording_id") or data.get("path")
         return {
             "call_id": data.get("call_id"),
             "toneset_id": data.get("toneset_id"),
-            "recording_url": self._recording_url(data.get("recording_id") or data.get("path")),
+            "recording_url": recording_url(self.coordinator.base_url, recording),
+            "recording_proxy_url": self._recording_proxy_url(recording),
             "test": data.get("test", False),
             "drill": data.get("drill", False),
         }
+
+    def _recording_proxy_url(self, value: Any) -> str | None:
+        """Return the HA-authenticated recording proxy path when possible."""
+        if value in (None, "") or not str(value).isdigit():
+            return None
+        return f"/api/tonewatch/media/{self.coordinator.entry.entry_id}/{value}"

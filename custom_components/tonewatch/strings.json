@@ -1,4 +1,14 @@
 {
+  "issues": {
+    "app_version_outdated": {
+      "title": "ToneWatch app is too old",
+      "description": "ToneWatch {app_version} is older than the minimum supported version {minimum_version}. Update the ToneWatch app."
+    },
+    "websocket_disconnected": {
+      "title": "ToneWatch connection is disconnected",
+      "description": "The ToneWatch WebSocket has been disconnected for about {minutes} minutes. Check the app and network connection."
+    }
+  },
   "config": {
     "step": {
       "user": {
