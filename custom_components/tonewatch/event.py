@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from homeassistant.components.event import EventEntity
 from homeassistant.config_entries import ConfigEntry
@@ -12,11 +12,13 @@ from .api import ToneWatchCoordinator
 from .entity import ToneWatchEntity
 from .urls import recording_url
 
+PARALLEL_UPDATES = 0
+
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry[dict[str, object]], async_add_entities: Any
 ) -> None:
-    coordinator: ToneWatchCoordinator = hass.data["tonewatch"][entry.entry_id]
+    coordinator = cast("ToneWatchCoordinator", entry.runtime_data)
     async_add_entities(
         [
             ToneWatchEvent(coordinator, item["id"])
@@ -31,7 +33,8 @@ class ToneWatchEvent(ToneWatchEntity, EventEntity):
     def __init__(self, coordinator: ToneWatchCoordinator, item_id: str) -> None:
         super().__init__(coordinator, "event", item_id)
         self._attr_event_types = ["pre_alert", "recording_ready"]
-        self._attr_name = self._toneset().get("name", item_id)
+        self._attr_translation_key = "tone_set_event"
+        self._attr_translation_placeholders = {"name": self._toneset().get("name", item_id)}
         self._last_triggered: tuple[Any, Any] | None = None
 
     def _handle_coordinator_update(self) -> None:

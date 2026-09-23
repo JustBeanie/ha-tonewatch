@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.config_entries import ConfigEntry
@@ -11,15 +11,17 @@ from homeassistant.core import HomeAssistant
 from .api import ToneWatchCoordinator
 from .entity import ToneWatchEntity, parse_datetime
 
+PARALLEL_UPDATES = 0
+
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry[dict[str, object]], async_add_entities: Any
 ) -> None:
-    async_add_entities([LastCallSensor(hass.data["tonewatch"][entry.entry_id])])
+    async_add_entities([LastCallSensor(cast("ToneWatchCoordinator", entry.runtime_data))])
 
 
 class LastCallSensor(ToneWatchEntity, SensorEntity):
-    _attr_name = "Last call"
+    _attr_translation_key = "last_call"
     _attr_device_class = SensorDeviceClass.TIMESTAMP
 
     def __init__(self, coordinator: ToneWatchCoordinator) -> None:

@@ -52,6 +52,57 @@ host and port, so manually configured and add-on entries use host/port duplicate
 detection until the server adds an authenticated identity endpoint or includes the
 identifier in Supervisor discovery.
 
+## Installation
+
+Install the `ToneWatch` custom repository through HACS:
+
+1. Open HACS and select **Integrations**.
+2. Add `https://github.com/JustBeanie/ha-tonewatch` as a custom repository of type **Integration**.
+3. Install ToneWatch, restart Home Assistant, and add **ToneWatch** from **Settings > Devices & services**.
+
+The current integration release is **0.2.0**. ToneWatch requires Home Assistant
+2026.2 or newer and a ToneWatch API token. It has no runtime dependencies beyond
+Home Assistant.
+
+## Configuration
+
+For manual setup, enter the ToneWatch host name or IP address, API port (the
+default is `8099`), and API token. The integration tests the authenticated
+`/api/devices` endpoint before saving the entry. Local ToneWatch instances can
+also be discovered over zeroconf; ToneWatch add-ons can be discovered through
+Supervisor. If a token expires, Home Assistant opens the reauthentication flow.
+
+## Entities and actions
+
+Each configured ToneWatch instance provides:
+
+- One **event** entity for each tone set. It emits `pre_alert` and
+  `recording_ready` events and includes call and recording attributes.
+- One **timestamp sensor** for the last detected call.
+- One **running binary sensor** for whether a call is active.
+- One **connectivity binary sensor** for each configured feed.
+- One **switch** for enabling or disabling each tone set.
+- One **button** for testing each tone set.
+
+Writes that cannot reach ToneWatch raise a Home Assistant error and restore the
+previous switch state. ToneWatch uses a push WebSocket connection; entities are
+marked unavailable while that connection is down and recover automatically.
+
+## Troubleshooting and removal
+
+If setup reports that it cannot connect, check the host, port, API token, and
+that `/api/devices` is reachable from the Home Assistant host. An invalid token
+is reported separately. During an outage, check the integration diagnostics and
+the ToneWatch app; a persistent WebSocket outage creates a repair issue. The
+integration logs one disconnect and one reconnect transition, rather than one
+message per retry.
+
+To remove ToneWatch, open **Settings > Devices & services**, select the
+ToneWatch integration, choose the entry menu, and select **Delete**. Remove the
+custom repository from HACS if it is no longer needed, then restart Home
+Assistant if HACS requests it. Existing blueprints and automations are not
+deleted automatically; remove them separately if desired.
+
 ## Development
 
 Install the pinned toolchain with `uv sync --python 3.13.13`, then run `just check`.

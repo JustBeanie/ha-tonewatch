@@ -9,6 +9,7 @@ from uuid import UUID
 import pytest
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import ATTR_RESTORED, STATE_UNAVAILABLE, Platform
+from homeassistant.core import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -266,10 +267,11 @@ async def test_switch_write_reverts_and_button_posts(
     coordinator = await _setup(hass, entry, initial_state, monkeypatch, api)
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
     fail_write = True
+    fail_button = False
 
     async def fake_request(method: str, path: str, *, json: dict[str, Any] | None = None) -> Any:
         calls.append((method, path, json))
-        if fail_write:
+        if fail_write or (path.endswith("/test") and fail_button):
             raise RuntimeError
         return {"ok": True}
 
@@ -279,13 +281,17 @@ async def test_switch_write_reverts_and_button_posts(
     button_id = registry.async_get_entity_id("button", DOMAIN, "instance-1_button_ems")
     assert switch_id is not None
     assert button_id is not None
-    with pytest.raises(RuntimeError):
+    with pytest.raises(HomeAssistantError):
         await hass.services.async_call(
             "switch", "turn_off", {"entity_id": switch_id}, blocking=True
         )
     assert _state_for(hass, registry, "switch", "instance-1_switch_ems").state == "on"
     fail_write = False
     await hass.services.async_call("switch", "turn_off", {"entity_id": switch_id}, blocking=True)
+    fail_button = True
+    with pytest.raises(HomeAssistantError):
+        await hass.services.async_call("button", "press", {"entity_id": button_id}, blocking=True)
+    fail_button = False
     await hass.services.async_call("button", "press", {"entity_id": button_id}, blocking=True)
     assert calls[0][:2] == ("PUT", "/api/tonesets/ems")
     assert calls[1][:2] == ("PUT", "/api/tonesets/ems")
@@ -313,6 +319,13 @@ async def test_feed_switch_button_disconnect_and_secret_redaction(
     await hass.async_block_till_done()
     event_state = _state_for(hass, registry, "event", "instance-1_event_ems")
     assert event_state.state == "unavailable"
+    for domain, unique_id in (
+        ("sensor", "instance-1_last_call"),
+        ("binary_sensor", "instance-1_call_active"),
+        ("switch", "instance-1_switch_ems"),
+        ("button", "instance-1_button_ems"),
+    ):
+        assert _state_for(hass, registry, domain, unique_id).state == STATE_UNAVAILABLE
     assert TOKEN not in str(hass.states.async_all())
 
 

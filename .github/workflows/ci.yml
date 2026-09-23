@@ -86,4 +86,4 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --locked
-      - run: uv run pytest
+      - run: uv run pytest --cov-report=term-missing --cov-report=xml

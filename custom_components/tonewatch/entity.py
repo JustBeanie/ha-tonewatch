@@ -15,6 +15,11 @@ class ToneWatchEntity(CoordinatorEntity[ToneWatchCoordinator]):
 
     _attr_has_entity_name = True
 
+    @property
+    def available(self) -> bool:
+        """Expose coordinator connection failures as entity unavailability."""
+        return bool(self.coordinator.last_update_success)
+
     def __init__(self, coordinator: ToneWatchCoordinator, kind: str, item_id: str) -> None:
         super().__init__(coordinator)
         self.item_id = item_id
@@ -32,10 +37,6 @@ class ToneWatchEntity(CoordinatorEntity[ToneWatchCoordinator]):
             "manufacturer": "ToneWatch",
             "configuration_url": coordinator.base_url,
         }
-
-    @property
-    def available(self) -> bool:
-        return bool(self.coordinator.last_update_success)
 
     @property
     def state_data(self) -> dict[str, Any]:

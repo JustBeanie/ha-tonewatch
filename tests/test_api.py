@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Any
 
 import aiohttp
@@ -101,3 +102,22 @@ async def test_clean_unload_cancels_pending_connection(hass: Any, monkeypatch: A
     await coordinator.async_start()
     await coordinator.async_stop()
     assert coordinator._task is None
+
+
+async def test_disconnect_and_reconnect_are_logged_once(hass: Any, caplog: Any) -> None:
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={"host": "tonewatch.local", "port": 8099, "api_token": "secret"},
+    )
+    coordinator = api.ToneWatchCoordinator(hass, entry)
+    caplog.set_level(logging.INFO, logger="custom_components.tonewatch.api")
+    coordinator._mark_connected()
+    coordinator._mark_disconnected(RuntimeError("offline"))
+    coordinator._mark_disconnected(RuntimeError("still offline"))
+    coordinator._mark_connected()
+    coordinator._mark_connected()
+    assert caplog.messages.count("ToneWatch WebSocket connected") == 2
+    assert (
+        sum(message.startswith("ToneWatch WebSocket disconnected") for message in caplog.messages)
+        == 1
+    )

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+import aiohttp
 import pytest
 from homeassistant.config_entries import SOURCE_HASSIO, SOURCE_REAUTH, SOURCE_USER
 from homeassistant.const import CONF_HOST, CONF_PORT
@@ -35,6 +36,11 @@ class FakeSession:
     def get(self, url: str, **kwargs: Any) -> FakeResponse:
         self.calls.append((url, kwargs["headers"]))
         return FakeResponse(self.status)
+
+
+class FailingSession:
+    def get(self, _url: str, **_kwargs: Any) -> Any:
+        raise aiohttp.ClientConnectionError("offline")
 
 
 @pytest.fixture
@@ -78,6 +84,15 @@ async def test_user_validation_errors(
     result = await _user_flow(hass)
     assert result["type"] == "form"
     assert result["errors"] == {"base": error}
+
+
+async def test_user_unreachable_host_is_reported(
+    hass: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(config_flow, "async_get_clientsession", lambda _hass: FailingSession())
+    result = await _user_flow(hass)
+    assert result["type"] == "form"
+    assert result["errors"] == {"base": "cannot_connect"}
 
 
 async def test_zeroconf_discovery_confirm_and_duplicate(
@@ -155,3 +170,23 @@ async def test_reauth_updates_token(hass: Any, fake_session: FakeSession) -> Non
     assert result["reason"] == "reauth_successful"
     assert entry.data[CONF_API_TOKEN] == "new"
     assert fake_session.calls
+
+
+async def test_reauth_invalid_token_keeps_form(hass: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_HOST: "tonewatch.local", CONF_PORT: 8099, CONF_API_TOKEN: "old"},
+    )
+    entry.add_to_hass(hass)
+    session = FakeSession(401)
+    monkeypatch.setattr(config_flow, "async_get_clientsession", lambda _hass: session)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": SOURCE_REAUTH, "entry_id": entry.entry_id},
+        data=entry.data,
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], user_input={CONF_API_TOKEN: "bad"}
+    )
+    assert result["type"] == "form"
+    assert result["errors"] == {"base": "invalid_auth"}
