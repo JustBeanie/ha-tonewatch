@@ -200,25 +200,21 @@ class ToneWatchCoordinator(DataUpdateCoordinator[EventData]):
                     self.websocket_url,
                     headers={"Authorization": self.authorization},
                 ) as websocket:
-                    self._connected = True
-                    self._disconnected_at = None
+                    self._mark_connected()
                     async_update_repairs(self.hass, self.app_version, self.disconnected_for)
                     await websocket.send_json({"type": "subscribe", "topics": EVENT_TOPICS})
                     self.async_set_updated_data(self.latest_state)
                     await self._consume(websocket)
                 if not self._stopped.is_set():
-                    self._connected = False
-                    self._disconnected_at = self._disconnected_at or time.monotonic()
+                    self._mark_disconnected()
             except asyncio.CancelledError:
                 raise
             except (aiohttp.ClientError, OSError, RuntimeError, TimeoutError) as err:
                 if self._stopped.is_set():
                     return
                 self.async_set_update_error(err)
-                self._connected = False
-                self._disconnected_at = self._disconnected_at or time.monotonic()
+                self._mark_disconnected(err)
                 async_update_repairs(self.hass, self.app_version, self.disconnected_for)
-                _LOGGER.warning("ToneWatch WebSocket disconnected: %s", err)
             if self._stopped.is_set():
                 return
             delay = min(MAX_BACKOFF, BASE_BACKOFF * (2**attempt))
@@ -226,6 +222,25 @@ class ToneWatchCoordinator(DataUpdateCoordinator[EventData]):
             attempt = min(attempt + 1, 30)
             async_update_repairs(self.hass, self.app_version, self.disconnected_for)
             await self._sleep(delay)
+
+    def _mark_disconnected(self, error: Exception | None = None) -> None:
+        """Record a disconnected transition and log it once."""
+        was_disconnected = not self._connected and self._disconnected_at is not None
+        self._connected = False
+        self._disconnected_at = self._disconnected_at or time.monotonic()
+        if not was_disconnected:
+            if error is None:
+                _LOGGER.warning("ToneWatch WebSocket disconnected")
+            else:
+                _LOGGER.warning("ToneWatch WebSocket disconnected: %s", error)
+
+    def _mark_connected(self) -> None:
+        """Record a connected transition and log it once."""
+        was_connected = self._connected
+        self._connected = True
+        self._disconnected_at = None
+        if not was_connected:
+            _LOGGER.info("ToneWatch WebSocket connected")
 
     async def _consume(self, websocket: aiohttp.ClientWebSocketResponse) -> None:
         """Consume server messages until the socket closes."""

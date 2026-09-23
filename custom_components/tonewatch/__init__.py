@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
@@ -24,6 +26,7 @@ async def async_setup(hass: HomeAssistant, _config: dict[str, object]) -> bool:
 async def async_setup_entry(hass: HomeAssistant, entry: ToneWatchConfigEntry) -> bool:
     """Set up ToneWatch from a config entry."""
     coordinator = ToneWatchCoordinator(hass, entry)
+    entry.runtime_data = cast("Any", coordinator)
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
     await coordinator.async_start()
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

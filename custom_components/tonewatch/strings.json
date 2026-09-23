@@ -44,5 +44,12 @@
       "already_configured": "This ToneWatch instance is already configured.",
       "reauth_successful": "Reauthentication successful."
     }
+  },
+  "entity": {
+    "sensor": {"last_call": {"name": "Last call"}},
+    "binary_sensor": {"call_active": {"name": "Call active"}, "feed_healthy": {"name": "{name} feed healthy"}},
+    "event": {"tone_set_event": {"name": "{name}"}},
+    "switch": {"tone_set": {"name": "{name}"}},
+    "button": {"tone_set_test": {"name": "Test {name}"}}
   }
 }

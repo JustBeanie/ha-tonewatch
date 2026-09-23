@@ -73,7 +73,7 @@ class ToneWatchConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     return "invalid_auth"
                 if response.status >= 400:
                     return "cannot_connect"
-        except (aiohttp.ClientError, OSError, TimeoutError):
+        except (aiohttp.ClientError, OSError, RuntimeError, TimeoutError):
             return "cannot_connect"
         return None
 
