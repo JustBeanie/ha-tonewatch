@@ -4,6 +4,11 @@ ToneWatch is a local Home Assistant custom integration for the ToneWatch API.
 It discovers local instances over zeroconf, supports Supervisor add-on discovery,
 and receives state updates over the authenticated WebSocket stream.
 
+The integration fires a `tonewatch_detected` Home Assistant bus event for every
+detection. Its data contains `call_id`, `toneset_id`, `source_id`,
+`recording_url`, `test`, and `drill`. The recording URL is absolute but carries
+no API token; authenticated media access is handled by Home Assistant.
+
 ToneWatch is a supplemental notification tool, not a certified primary alerting
 system. Keep an independently supervised and tested alerting path for emergency
 and life-safety notifications.

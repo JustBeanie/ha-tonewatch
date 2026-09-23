@@ -12,5 +12,6 @@ CONF_PORT = "port"
 WS_PATH = "/api/ws"
 API_VALIDATION_PATH = "/api/devices"
 EVENT_TOPICS = ["events"]
+PLATFORMS = ["event", "sensor", "binary_sensor", "switch", "button"]
 BASE_BACKOFF = 1.0
 MAX_BACKOFF = 60.0
