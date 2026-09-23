@@ -1,0 +1,39 @@
+blueprint:
+  name: ToneWatch - notify with dispatch audio
+  description: Send a mobile notification with a ToneWatch recording. iOS receives an audio attachment; Android receives a link because the Android companion notification attachment does not support arbitrary audio files.
+  domain: automation
+  source_url: https://github.com/JustBeanie/ha-tonewatch/blob/main/blueprints/automation/tonewatch/notify_with_audio.yaml
+  input:
+    tone_set_event:
+      name: Tone set event entity
+      description: The ToneWatch event entity for the tone set to monitor.
+      selector:
+        entity:
+          domain: event
+          integration: tonewatch
+    notify_service:
+      name: Mobile notify service
+      description: The notify.mobile_app service to call.
+      selector:
+        text:
+    notification_title:
+      name: Notification title
+      description: Title shown on the phone.
+      default: ToneWatch recording ready
+      selector:
+        text:
+trigger:
+  - platform: state
+    entity_id: !input tone_set_event
+    to: recording_ready
+action:
+  - service: !input notify_service
+    data:
+      title: !input notification_title
+      message: "ToneWatch recording ready: {{ trigger.to_state.attributes.recording_proxy_url | default(trigger.to_state.attributes.recording_url) }}"
+      data:
+        attachment:
+          url: "{{ trigger.to_state.attributes.recording_proxy_url | default(trigger.to_state.attributes.recording_url) }}"
+          content-type: audio/mpeg
+mode: queued
+max: 10

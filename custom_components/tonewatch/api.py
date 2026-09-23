@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
@@ -22,6 +23,8 @@ from .const import (
     MAX_BACKOFF,
     WS_PATH,
 )
+from .repairs import async_update_repairs
+from .urls import recording_url
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -67,6 +70,30 @@ class ToneWatchCoordinator(DataUpdateCoordinator[EventData]):
         self._task: asyncio.Task[None] | None = None
         self._stopped = asyncio.Event()
         self.latest_state: EventData = {"events": [], "last_event": None, "by_type": {}}
+        self._connected = False
+        self._disconnected_at: float | None = None
+
+    @property
+    def connection_state(self) -> str:
+        """Return the current push connection state."""
+        if self._connected:
+            return "connected"
+        if self._disconnected_at is not None or not self.last_update_success:
+            return "disconnected"
+        return "connecting"
+
+    @property
+    def disconnected_for(self) -> float:
+        """Return the elapsed time since the WebSocket disconnected."""
+        if self._disconnected_at is None:
+            return 0.0
+        return max(0.0, time.monotonic() - self._disconnected_at)
+
+    @property
+    def app_version(self) -> str | None:
+        """Return the app version from the latest health response."""
+        value = self.latest_state.get("app_version")
+        return value if isinstance(value, str) else None
 
     async def _async_api_json(
         self, method: str, path: str, *, json: dict[str, Any] | None = None
@@ -111,6 +138,12 @@ class ToneWatchCoordinator(DataUpdateCoordinator[EventData]):
                 },
             }
         )
+        if isinstance(health, dict):
+            build = health.get("build")
+            version = build.get("version") if isinstance(build, dict) else health.get("version")
+            if isinstance(version, str):
+                self.latest_state["app_version"] = version
+        async_update_repairs(self.hass, self.app_version, self.disconnected_for)
         self.async_set_updated_data(self.latest_state)
 
     async def _async_no_poll(self) -> EventData:
@@ -167,21 +200,31 @@ class ToneWatchCoordinator(DataUpdateCoordinator[EventData]):
                     self.websocket_url,
                     headers={"Authorization": self.authorization},
                 ) as websocket:
+                    self._connected = True
+                    self._disconnected_at = None
+                    async_update_repairs(self.hass, self.app_version, self.disconnected_for)
                     await websocket.send_json({"type": "subscribe", "topics": EVENT_TOPICS})
                     self.async_set_updated_data(self.latest_state)
                     await self._consume(websocket)
+                if not self._stopped.is_set():
+                    self._connected = False
+                    self._disconnected_at = self._disconnected_at or time.monotonic()
             except asyncio.CancelledError:
                 raise
             except (aiohttp.ClientError, OSError, RuntimeError, TimeoutError) as err:
                 if self._stopped.is_set():
                     return
                 self.async_set_update_error(err)
+                self._connected = False
+                self._disconnected_at = self._disconnected_at or time.monotonic()
+                async_update_repairs(self.hass, self.app_version, self.disconnected_for)
                 _LOGGER.warning("ToneWatch WebSocket disconnected: %s", err)
             if self._stopped.is_set():
                 return
             delay = min(MAX_BACKOFF, BASE_BACKOFF * (2**attempt))
             delay *= 0.5 + self._random() * 0.5
             attempt = min(attempt + 1, 30)
+            async_update_repairs(self.hass, self.app_version, self.disconnected_for)
             await self._sleep(delay)
 
     async def _consume(self, websocket: aiohttp.ClientWebSocketResponse) -> None:
@@ -229,8 +272,8 @@ class ToneWatchCoordinator(DataUpdateCoordinator[EventData]):
                 key: data.get(key)
                 for key in ("call_id", "toneset_id", "source_id", "test", "drill")
             }
-            bus_data["recording_url"] = self._recording_url(
-                data.get("recording_id") or data.get("path")
+            bus_data["recording_url"] = recording_url(
+                self.base_url, data.get("recording_id") or data.get("path")
             )
             self.hass.bus.async_fire("tonewatch_detected", bus_data)
         elif event_type == "RecordingReady":
@@ -252,9 +295,3 @@ class ToneWatchCoordinator(DataUpdateCoordinator[EventData]):
             return
         self.latest_state["tonesets"] = tonesets if isinstance(tonesets, list) else []
         self.async_set_updated_data(self.latest_state)
-
-    def _recording_url(self, value: Any) -> str | None:
-        """Build a token-free absolute recording URL."""
-        if value in (None, ""):
-            return None
-        return f"{self.base_url}/api/recordings/{value}"

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, cast
-from urllib.parse import urljoin
 
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -63,16 +62,6 @@ class ToneWatchEntity(CoordinatorEntity[ToneWatchCoordinator]):
             if event.get("data", {}).get("toneset_id") == self.item_id:
                 return cast("dict[str, Any]", event.get("data", {}))
         return cast("dict[str, Any]", {})
-
-    def _recording_url(self, value: Any) -> str | None:
-        if value in (None, ""):
-            return None
-        if isinstance(value, str) and value.startswith(("http://", "https://")):
-            return value
-        path = str(value).lstrip("/")
-        if not path.startswith("recordings/"):
-            path = f"recordings/{path}"
-        return urljoin(f"{self.coordinator.base_url}/api/", path)
 
 
 def parse_datetime(value: Any) -> datetime | None:
