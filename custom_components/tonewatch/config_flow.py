@@ -203,6 +203,8 @@ class ToneWatchConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         schema = vol.Schema(fields)
         return self.async_show_form(
             step_id=step_id,
-            data_schema=schema,
+            # HA 2026.9+ types this as probatio.Schema; at runtime HA aliases voluptuous
+            # to probatio, so vol.Schema works on every supported version.
+            data_schema=schema,  # type: ignore[arg-type]
             errors={"base": error} if error else None,
         )

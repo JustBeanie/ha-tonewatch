@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from homeassistant.components.binary_sensor import BinarySensorDeviceClass, BinarySensorEntity
+# BinarySensorDeviceClass moved to binary_sensor.const in 2026.x but is still re-exported here;
+# importing from .const would break the 2026.2 minimum.
+from homeassistant.components.binary_sensor import (  # type: ignore[attr-defined]
+    BinarySensorDeviceClass,
+    BinarySensorEntity,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 

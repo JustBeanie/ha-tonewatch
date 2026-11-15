@@ -105,5 +105,5 @@ deleted automatically; remove them separately if desired.
 
 ## Development
 
-Install the pinned toolchain with `uv sync --python 3.13.13`, then run `just check`.
+Install the pinned toolchain with `uv sync --python 3.14`, then run `just check`.
 The integration uses no runtime Python dependencies beyond Home Assistant.

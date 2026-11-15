@@ -75,6 +75,8 @@ async def test_media_source_browse_and_resolve(
         await source.async_resolve_media(MediaSourceItem(hass, DOMAIN, "recording/nope", None))
 
 
+# HA's KEY_AUTHENTICATED is still a plain str; aiohttp 3.13+ warns on str request keys.
+@pytest.mark.filterwarnings("ignore::aiohttp.web_exceptions.NotAppKeyWarning")
 async def test_media_proxy_requires_ha_auth_forwards_range_and_redacts_token(
     hass: Any, media_entry: MockConfigEntry, monkeypatch: Any, caplog: Any
 ) -> None:
