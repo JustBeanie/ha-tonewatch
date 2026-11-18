@@ -6,7 +6,12 @@ from typing import TYPE_CHECKING, Any
 
 import aiohttp
 import pytest
-from homeassistant.config_entries import SOURCE_HASSIO, SOURCE_REAUTH, SOURCE_USER
+from homeassistant.config_entries import (
+    SOURCE_HASSIO,
+    SOURCE_REAUTH,
+    SOURCE_RECONFIGURE,
+    SOURCE_USER,
+)
 from homeassistant.const import CONF_HOST, CONF_PORT
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -118,6 +123,30 @@ async def test_zeroconf_discovery_confirm_and_duplicate(
     assert duplicate["reason"] == "already_configured"
 
 
+async def test_zeroconf_rediscovery_updates_moved_host(hass: Any) -> None:
+    """A stable ToneWatch instance can move without creating a duplicate entry."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="stable-1",
+        data={
+            CONF_HOST: "old.local",
+            CONF_PORT: 8099,
+            CONF_API_TOKEN: "token",
+            CONF_INSTANCE_ID: "stable-1",
+        },
+    )
+    entry.add_to_hass(hass)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "zeroconf"},
+        data={"host": "new.local", "port": 8100, "properties": {b"instance_id": b"stable-1"}},
+    )
+    assert result["type"] == "abort"
+    assert result["reason"] == "already_configured"
+    assert entry.data[CONF_HOST] == "new.local"
+    assert entry.data[CONF_PORT] == 8100
+
+
 async def test_hassio_discovery_confirm(hass: Any, fake_session: FakeSession) -> None:
     result = await hass.config_entries.flow.async_init(
         DOMAIN,
@@ -190,3 +219,24 @@ async def test_reauth_invalid_token_keeps_form(hass: Any, monkeypatch: pytest.Mo
     )
     assert result["type"] == "form"
     assert result["errors"] == {"base": "invalid_auth"}
+
+
+async def test_reconfigure_updates_connection(hass: Any, fake_session: FakeSession) -> None:
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_HOST: "old.local", CONF_PORT: 8099, CONF_API_TOKEN: "old"},
+    )
+    entry.add_to_hass(hass)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_RECONFIGURE, "entry_id": entry.entry_id}
+    )
+    assert result["step_id"] == "reconfigure"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        user_input={CONF_HOST: "new.local", CONF_PORT: 8100, CONF_API_TOKEN: "new"},
+    )
+    assert result["type"] == "abort"
+    assert entry.data[CONF_HOST] == "new.local"
+    assert entry.data[CONF_PORT] == 8100
+    assert entry.data[CONF_API_TOKEN] == "new"
+    assert fake_session.calls[0][0] == "http://new.local:8100/api/devices"

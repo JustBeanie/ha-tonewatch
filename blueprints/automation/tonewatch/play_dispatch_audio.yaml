@@ -3,6 +3,8 @@ blueprint:
   description: Play a ToneWatch recording on a selected media player when a tone set reports recording_ready.
   domain: automation
   source_url: https://github.com/JustBeanie/ha-tonewatch/blob/main/blueprints/automation/tonewatch/play_dispatch_audio.yaml
+  homeassistant:
+    min_version: "2026.2.0"
   input:
     tone_set_event:
       name: Tone set event entity
@@ -20,13 +22,18 @@ blueprint:
 trigger:
   - platform: state
     entity_id: !input tone_set_event
-    to: recording_ready
+condition:
+  - condition: template
+    value_template: >-
+      {{ trigger.to_state is not none
+         and trigger.to_state.attributes.get('event_type') == 'recording_ready'
+         and trigger.to_state.attributes.get('recording_proxy_url') }}
 action:
-  - service: media_player.play_media
+  - action: media_player.play_media
     target:
       entity_id: !input media_player
     data:
-      media_content_id: "{{ trigger.to_state.attributes.recording_proxy_url | default(trigger.to_state.attributes.recording_url) }}"
-      media_content_type: audio/mpeg
+      media_content_id: "{{ trigger.to_state.attributes.recording_proxy_url }}"
+      media_content_type: "{{ 'audio/ogg' if trigger.to_state.attributes.get('format') in ['ogg', 'opus'] else 'audio/mpeg' }}"
 mode: queued
 max: 10

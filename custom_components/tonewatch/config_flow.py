@@ -115,7 +115,7 @@ class ToneWatchConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if instance_id:
             self._discovered[CONF_INSTANCE_ID] = instance_id
             await self.async_set_unique_id(instance_id)
-            self._abort_if_unique_id_configured()
+            self._abort_if_unique_id_configured(updates={CONF_HOST: host, CONF_PORT: port})
         return await self.async_step_zeroconf_confirm()
 
     async def async_step_zeroconf_confirm(
@@ -145,7 +145,12 @@ class ToneWatchConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if instance_id:
             self._discovered[CONF_INSTANCE_ID] = str(instance_id)
             await self.async_set_unique_id(str(instance_id))
-            self._abort_if_unique_id_configured()
+            self._abort_if_unique_id_configured(
+                updates={
+                    CONF_HOST: self._discovered[CONF_HOST],
+                    CONF_PORT: self._discovered[CONF_PORT],
+                }
+            )
         return await self.async_step_hassio_confirm()
 
     async def async_step_hassio_confirm(
@@ -166,6 +171,21 @@ class ToneWatchConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Start reauthentication for an existing entry."""
         self._discovered = dict(entry_data)
         return await self.async_step_reauth_confirm()
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, object] | None = None
+    ) -> ConfigFlowResult:
+        """Let the user update the host, port, or API token."""
+        entry = self._get_reconfigure_entry()
+        if user_input is not None:
+            if not user_input.get(CONF_API_TOKEN):
+                user_input.pop(CONF_API_TOKEN, None)
+            data = {**entry.data, **user_input}
+            error = await self._validate(data)
+            if error:
+                return self._form("reconfigure", user_input, error)
+            return self.async_update_reload_and_abort(entry, data=data)
+        return self._form("reconfigure", dict(entry.data))
 
     async def async_step_reauth_confirm(
         self, user_input: dict[str, object] | None = None
@@ -191,8 +211,13 @@ class ToneWatchConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         error: str | None = None,
     ) -> ConfigFlowResult:
         """Return a token-safe config form."""
-        fields: dict[object, object] = {vol.Required(CONF_API_TOKEN): str}
-        if step_id == "user":
+        token_key = (
+            vol.Optional(CONF_API_TOKEN)
+            if step_id == "reconfigure"
+            else vol.Required(CONF_API_TOKEN)
+        )
+        fields: dict[object, object] = {token_key: str}
+        if step_id in {"user", "reconfigure"}:
             fields = {
                 vol.Required(CONF_HOST, default=(user_input or {}).get(CONF_HOST, "")): str,
                 vol.Required(

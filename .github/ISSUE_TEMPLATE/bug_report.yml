@@ -1,0 +1,30 @@
+name: Bug report
+description: Report a problem with the Home Assistant integration
+title: "Bug: "
+body:
+  - type: markdown
+    attributes:
+      value: "For security issues, use private vulnerability reporting. Remove tokens, recordings, signed URLs, and CAD addresses from public reports."
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Home Assistant, ha-tonewatch, and ToneWatch app versions
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Redacted logs or diagnostics

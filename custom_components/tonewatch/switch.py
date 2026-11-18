@@ -19,12 +19,21 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry[dict[str, object]], async_add_entities: Any
 ) -> None:
     coordinator = cast("ToneWatchCoordinator", entry.runtime_data)
-    async_add_entities(
-        [
-            ToneSetSwitch(coordinator, item["id"])
+    known: set[str] = set()
+
+    def add_new() -> None:
+        ids = {
+            str(item["id"])
             for item in coordinator.latest_state.get("tonesets", [])
-        ]
-    )
+            if isinstance(item, dict) and item.get("id")
+        }
+        new = ids - known
+        known.update(new)
+        if new:
+            async_add_entities([ToneSetSwitch(coordinator, item_id) for item_id in sorted(new)])
+
+    entry.async_on_unload(coordinator.async_add_listener(add_new))
+    add_new()
 
 
 class ToneSetSwitch(ToneWatchEntity, SwitchEntity):

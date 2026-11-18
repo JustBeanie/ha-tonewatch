@@ -49,7 +49,7 @@ class ToneWatchEntity(CoordinatorEntity[ToneWatchCoordinator]):
                 (
                     item
                     for item in self.state_data.get("tonesets", [])
-                    if item.get("id") == self.item_id
+                    if str(item.get("id")) == self.item_id
                 ),
                 {},
             ),
@@ -57,10 +57,10 @@ class ToneWatchEntity(CoordinatorEntity[ToneWatchCoordinator]):
 
     def _event_data(self) -> dict[str, Any]:
         last_call = self.state_data.get("last_call", {})
-        if last_call.get("toneset_id") == self.item_id:
+        if str(last_call.get("toneset_id")) == self.item_id:
             return cast("dict[str, Any]", last_call)
         for event in reversed(self.state_data.get("events", [])):
-            if event.get("data", {}).get("toneset_id") == self.item_id:
+            if str(event.get("data", {}).get("toneset_id")) == self.item_id:
                 return cast("dict[str, Any]", event.get("data", {}))
         return cast("dict[str, Any]", {})
 

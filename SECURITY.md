@@ -1,13 +1,11 @@
-# Security Policy
+# Security policy
 
-## Supported Versions
+## Supported versions
 
-Latest
+Security fixes target the latest released version of ha-tonewatch. Update Home Assistant, the ToneWatch app, and this integration before reporting a problem.
 
-## Reporting a Vulnerability
+## Report privately
 
-Use this section to tell people how to report a vulnerability.
+Use [GitHub private vulnerability reporting](https://github.com/JustBeanie/ha-tonewatch/security/advisories/new). Do not open a public issue or pull request for a vulnerability.
 
-Tell them where to go, how often they can expect to get an update on a
-reported vulnerability, what to expect if the vulnerability is accepted or
-declined, etc.
+Include the affected versions, deployment type, reproduction steps, and the impact. Remove API tokens, signed live URLs, radio recordings, CAD addresses, and other personal data from the report. The maintainer will assess the report privately and coordinate a fix and advisory where appropriate.

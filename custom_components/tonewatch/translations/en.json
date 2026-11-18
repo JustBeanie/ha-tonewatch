@@ -9,19 +9,16 @@
       "description": "The ToneWatch WebSocket has been disconnected for about {minutes} minutes. Check the app and network connection."
     }
   },
-  "entity": {
-    "sensor": {"last_call": {"name": "Last call"}},
-    "binary_sensor": {"call_active": {"name": "Call active"}, "feed_healthy": {"name": "{name} feed healthy"}},
-    "event": {"tone_set_event": {"name": "{name}"}},
-    "switch": {"tone_set": {"name": "{name}"}},
-    "button": {"tone_set_test": {"name": "Test {name}"}}
-  },
   "config": {
     "step": {
       "user": {
         "title": "Connect to ToneWatch",
         "description": "Enter the ToneWatch host, port, and API token.",
-        "data": {"host": "Host", "port": "Port", "api_token": "API token"}
+        "data": {
+          "host": "Host",
+          "port": "Port",
+          "api_token": "API token"
+        }
       },
       "zeroconf_confirm": {
         "title": "Confirm ToneWatch",
@@ -37,6 +34,11 @@
         "title": "Reauthenticate ToneWatch",
         "description": "Enter a replacement API token.",
         "data": {"api_token": "API token"}
+      },
+      "reconfigure": {
+        "title": "Reconfigure ToneWatch",
+        "description": "Update the host or port. Leave the API token blank to keep the current token.",
+        "data": {"host": "Host", "port": "Port", "api_token": "API token"}
       }
     },
     "error": {
@@ -45,7 +47,29 @@
     },
     "abort": {
       "already_configured": "This ToneWatch instance is already configured.",
-      "reauth_successful": "Reauthentication successful."
+      "reauth_successful": "Reauthentication successful.",
+      "reconfigure_successful": "ToneWatch connection updated."
     }
+  },
+  "entity": {
+    "sensor": {
+      "last_call": {"name": "Last call"},
+      "storage_forecast": {"name": "Storage days remaining"},
+      "cad_active": {"name": "{name} active incidents"},
+      "alert_failures": {"name": "{name} alert failures"}
+    },
+    "binary_sensor": {
+      "call_active": {"name": "Call active"},
+      "feed_healthy": {"name": "{name} feed healthy"},
+      "squelch_open": {"name": "{name} squelch open"},
+      "cad_connected": {"name": "{name} CAD connected"}
+    },
+    "event": {
+      "tone_set_event": {"name": "{name}"},
+      "tone_discovered": {"name": "Discovered tone"},
+      "call_enriched": {"name": "CAD-enriched call"}
+    },
+    "switch": {"tone_set": {"name": "{name}"}},
+    "button": {"tone_set_test": {"name": "Test {name}"}}
   }
 }
