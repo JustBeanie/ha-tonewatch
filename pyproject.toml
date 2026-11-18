@@ -1,6 +1,6 @@
 [project]
 name = "ha-tonewatch"
-version = "0.2.0"
+version = "0.3.0"
 description = "Home Assistant custom integration for ToneWatch"
 requires-python = ">=3.14.2,<3.15"
 dependencies = [

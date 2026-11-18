@@ -1,23 +1,26 @@
 rules:
+  # Bronze
   action-setup:
     status: exempt
-    comment: ToneWatch has no custom service actions; its actions are provided by platforms.
-  appropriate-polling:
-    status: exempt
-    comment: ToneWatch is push-based over WebSocket and does not poll.
-  brands: done
-  common-modules: done
-  config-flow-test-coverage: done
+    comment: The integration provides entity controls, but no custom actions.
+  appropriate-polling: done
+  brands:
+    status: todo
+    comment: ToneWatch artwork is in this repository; upstream integration brand registration is pending.
+  common-modules:
+    status: todo
+    comment: The push coordinator still lives in api.py instead of coordinator.py.
   config-flow: done
+  config-flow-test-coverage: done
   dependency-transparency: done
   docs-actions: done
-  docs-triggers: done
   docs-conditions:
     status: exempt
-    comment: ToneWatch does not provide custom conditions.
+    comment: The integration does not provide custom conditions.
   docs-high-level-description: done
   docs-installation-instructions: done
   docs-removal-instructions: done
+  docs-triggers: done
   entity-event-setup: done
   entity-unique-id: done
   has-entity-name: done
@@ -25,6 +28,8 @@ rules:
   test-before-configure: done
   test-before-setup: done
   unique-config-entry: done
+
+  # Silver
   action-exceptions: done
   config-entry-unloading: done
   docs-configuration-parameters: done
@@ -34,4 +39,44 @@ rules:
   log-when-unavailable: done
   parallel-updates: done
   reauthentication-flow: done
-  test-coverage: done
+  test-coverage:
+    status: todo
+    comment: Coverage passes the repository's 90% gate but is not above 95% in every module.
+
+  # Gold
+  devices: done
+  diagnostics: done
+  discovery: done
+  discovery-update-info: done
+  docs-data-update: done
+  docs-examples: done
+  docs-known-limitations: done
+  docs-supported-devices: done
+  docs-supported-functions: done
+  docs-troubleshooting: done
+  docs-use-cases: done
+  dynamic-devices: done
+  entity-category: done
+  entity-device-class: done
+  entity-disabled-by-default: done
+  entity-translations: done
+  exception-translations:
+    status: todo
+    comment: Entity action failures still use upstream exception messages.
+  icon-translations:
+    status: todo
+    comment: Entities use platform icons but do not provide icon translations.
+  reconfiguration-flow: done
+  repair-issues: done
+  stale-devices:
+    status: todo
+    comment: Removed upstream tone sets and sources are not pruned from the entity registry.
+
+  # Platinum
+  async-dependency:
+    status: exempt
+    comment: There is no external ToneWatch client dependency; the integration uses aiohttp directly.
+  inject-websession: done
+  strict-typing:
+    status: todo
+    comment: Mypy strict passes locally, but the integration is not registered in Home Assistant Core's strict typing list.

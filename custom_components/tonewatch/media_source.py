@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from urllib.parse import quote, urlencode, urljoin
 
 import aiohttp
 from aiohttp import web
@@ -24,7 +26,7 @@ from .const import DOMAIN
 from .urls import recording_url
 
 _LOGGER = logging.getLogger(__name__)
-MAX_CHILDREN = 100
+PAGE_SIZE = 200
 
 
 def _folder(hass: HomeAssistant, identifier: str, title: str) -> BrowseMediaSource:
@@ -40,6 +42,24 @@ def _folder(hass: HomeAssistant, identifier: str, title: str) -> BrowseMediaSour
     )
 
 
+def _mime(fmt: str) -> str:
+    return {"mp3": "audio/mpeg", "ogg": "audio/ogg", "opus": "audio/ogg"}.get(
+        fmt, "application/octet-stream"
+    )
+
+
+def _playable(identifier: str, title: str, mime_type: str) -> BrowseMediaSource:
+    return BrowseMediaSource(
+        domain=DOMAIN,
+        identifier=identifier,
+        media_class=MediaClass.MUSIC,
+        media_content_type=mime_type,
+        title=title,
+        can_play=True,
+        can_expand=False,
+    )
+
+
 class ToneWatchMediaSource(MediaSource):
     """Browse ToneWatch calls and recordings."""
 
@@ -49,28 +69,18 @@ class ToneWatchMediaSource(MediaSource):
         super().__init__(DOMAIN)
         self.hass = hass
 
-    @property
-    def coordinator(self) -> Any:
-        entries = self.hass.data.get(DOMAIN, {})
-        coordinator = next(
-            (value for value in entries.values() if hasattr(value, "_async_api_json")), None
-        )
+    def _coordinator(self, entry_id: str) -> Any:
+        coordinator = self.hass.data.get(DOMAIN, {}).get(entry_id)
         if coordinator is None:
-            raise Unresolvable("ToneWatch is not configured")
+            raise Unresolvable("ToneWatch instance is not configured")
         return coordinator
 
-    async def _calls(self, **filters: str) -> list[dict[str, Any]]:
+    async def _calls(self, coordinator: Any, **filters: str) -> list[dict[str, Any]]:
         cursor = 0
         result: list[dict[str, Any]] = []
-        while len(result) < MAX_CHILDREN:
-            query = "&".join(
-                [
-                    "limit=200",
-                    f"cursor={cursor}",
-                    *[f"{key}={value}" for key, value in filters.items()],
-                ]
-            )
-            payload = await self.coordinator._async_api_json("GET", f"/api/calls?{query}")
+        while True:
+            query = urlencode({"limit": PAGE_SIZE, "cursor": cursor, **filters})
+            payload = await coordinator._async_api_json("GET", f"/api/calls?{query}")
             if not isinstance(payload, dict):
                 break
             items = payload.get("items", [])
@@ -80,99 +90,181 @@ class ToneWatchMediaSource(MediaSource):
             next_cursor = payload.get("next_cursor")
             if next_cursor is None:
                 break
-            cursor = int(next_cursor)
-        return result[:MAX_CHILDREN]
+            try:
+                new_cursor = int(next_cursor)
+            except (TypeError, ValueError):
+                break
+            if new_cursor <= cursor:
+                break
+            cursor = new_cursor
+        return result
+
+    async def _discovered(self, coordinator: Any) -> list[dict[str, Any]]:
+        result: list[dict[str, Any]] = []
+        offset = 0
+        while True:
+            payload = await coordinator._async_api_json(
+                "GET", f"/api/discovered-tones?limit={PAGE_SIZE}&offset={offset}"
+            )
+            items = payload.get("items", []) if isinstance(payload, dict) else []
+            if not isinstance(items, list) or not items:
+                break
+            result.extend(item for item in items if isinstance(item, dict))
+            if len(items) < PAGE_SIZE:
+                break
+            offset += len(items)
+        return result
 
     async def async_browse_media(self, item: MediaSourceItem) -> BrowseMediaSource:
         identifier = item.identifier.strip("/")
         if not identifier:
-            calls = await self._calls()
-            years = sorted({str(_parse_started(call)[0]) for call in calls}, key=int)
-            result = _folder(self.hass, "", "ToneWatch recordings")
-            result.children = [_folder(self.hass, year, year) for year in years[-MAX_CHILDREN:]]
+            result = _folder(self.hass, "", "ToneWatch")
+            result.children = [
+                _folder(self.hass, f"instance/{entry_id}", str(entry.data.get("host", entry_id)))
+                for entry_id, entry in (
+                    (key, value.entry)
+                    for key, value in self.hass.data.get(DOMAIN, {}).items()
+                    if hasattr(value, "entry")
+                )
+            ]
             return result
-
         parts = identifier.split("/")
-        if len(parts) < 1 or len(parts) > 3 or not all(part.isdigit() for part in parts[:3]):
+        if len(parts) < 2 or parts[0] != "instance":
             raise Unresolvable(f"Unknown ToneWatch media id: {identifier}")
-        if len(parts) < 3:
-            prefix = "/".join(parts)
-            calls = await self._calls()
-            expected = tuple(parts)
-            values = sorted(
-                {
-                    part[len(parts)]
-                    for call in calls
-                    if (part := _date_parts(call))[0 : len(parts)] == expected
-                }
-            )
-            result = _folder(self.hass, prefix, parts[-1])
-            result.children = [_folder(self.hass, f"{prefix}/{value}", value) for value in values]
+        entry_id = parts[1]
+        coordinator = self._coordinator(entry_id)
+        if len(parts) == 2:
+            result = _folder(self.hass, identifier, "ToneWatch")
+            result.children = [
+                _folder(self.hass, f"{identifier}/recordings", "Recordings"),
+                _folder(self.hass, f"{identifier}/live", "Live feeds"),
+                _folder(self.hass, f"{identifier}/discovered", "Discovered tone clips"),
+            ]
             return result
+        section = parts[2]
+        if section == "live" and len(parts) == 3:
+            result = _folder(self.hass, identifier, "Live feeds")
+            result.children = [
+                _playable(
+                    f"live/{entry_id}/{source['id']}",
+                    str(source.get("name", source["id"])),
+                    "audio/mpeg",
+                )
+                for source in coordinator.latest_state.get("configured_sources", [])
+                if isinstance(source, dict)
+                and source.get("id")
+                and source.get("live_stream_enabled")
+            ]
+            return result
+        if section == "discovered" and len(parts) == 3:
+            result = _folder(self.hass, identifier, "Discovered tone clips")
+            result.children = [
+                _playable(
+                    f"clip/{entry_id}/{tone['id']}",
+                    f"Tone {tone['id']} · {tone.get('count', 1)} observations",
+                    "audio/mpeg",
+                )
+                for tone in await self._discovered(coordinator)
+                if tone.get("id") is not None and tone.get("best_clip_recording_path")
+            ]
+            return result
+        if section != "recordings" or len(parts) > 6:
+            raise Unresolvable(f"Unknown ToneWatch media id: {identifier}")
+        date_parts = parts[3:]
+        if any(not part.isdigit() for part in date_parts):
+            raise Unresolvable(f"Unknown ToneWatch media id: {identifier}")
+        try:
+            if date_parts:
+                year = int(date_parts[0])
+                month = int(date_parts[1]) if len(date_parts) > 1 else 1
+                day = int(date_parts[2]) if len(date_parts) > 2 else 1
+                start = datetime(year, month, day, tzinfo=UTC)
+                if len(date_parts) == 1:
+                    end = datetime(year + 1, 1, 1, tzinfo=UTC)
+                elif len(date_parts) == 2:
+                    end = datetime(year + (month == 12), month % 12 + 1, 1, tzinfo=UTC)
+                else:
+                    end = start + timedelta(days=1)
+                calls = await self._calls(
+                    coordinator, since=start.isoformat(), until=end.isoformat()
+                )
+                calls = [call for call in calls if start <= _parse_started(call)[3] < end]
+            else:
+                calls = await self._calls(coordinator)
+        except (ValueError, KeyError) as err:
+            raise Unresolvable(f"Invalid ToneWatch date: {identifier}") from err
+        result = _folder(self.hass, identifier, date_parts[-1] if date_parts else "Recordings")
+        if len(date_parts) < 3:
+            values = sorted({_date_parts(call)[len(date_parts)] for call in calls}, reverse=True)
+            result.children = [
+                _folder(self.hass, f"{identifier}/{value}", value) for value in values
+            ]
+            return result
+        semaphore = asyncio.Semaphore(8)
 
-        year, month, day = parts
-        start = datetime(int(year), int(month), int(day), tzinfo=UTC).isoformat()
-        end = (
-            datetime(int(year), int(month), int(day), tzinfo=UTC) + timedelta(days=1)
-        ).isoformat()
-        calls = await self._calls(since=start, until=end)
-        result = _folder(self.hass, identifier, f"{year}-{month}-{day}")
-        children: list[BrowseMediaSource] = []
-        for call in calls:
-            detail = await self.coordinator._async_api_json("GET", f"/api/calls/{call['id']}")
-            for recording in detail.get("recordings", []) if isinstance(detail, dict) else []:
-                if not isinstance(recording, dict) or recording.get("id") is None:
+        async def fetch_detail(call: dict[str, Any]) -> dict[str, Any] | None:
+            async with semaphore:
+                detail = await coordinator._async_api_json(
+                    "GET", f"/api/calls/{quote(str(call['id']), safe='')}"
+                )
+                return detail if isinstance(detail, dict) else None
+
+        ordered = sorted(calls, key=lambda value: value["started_at"], reverse=True)
+        details = await asyncio.gather(*(fetch_detail(call) for call in ordered))
+        children = []
+        for call, detail in zip(ordered, details, strict=True):
+            if not isinstance(detail, dict):
+                continue
+            for recording in detail.get("recordings", []):
+                if not isinstance(recording, dict) or not isinstance(recording.get("id"), int):
                     continue
-                timestamp = _parse_started(call)[3].strftime("%H:%M:%S")
                 names = [
-                    self._toneset_name(item.get("toneset_id"))
-                    for item in detail.get("tone_sets", [])
-                    if isinstance(item, dict)
+                    self._toneset_name(coordinator, tone.get("toneset_id"))
+                    for tone in detail.get("tone_sets", [])
+                    if isinstance(tone, dict)
                 ]
+                fmt = str(recording.get("format", "mp3"))
                 title = (
-                    f"{timestamp} - {', '.join(names) or 'ToneWatch'} - "
+                    f"{_parse_started(call)[3]:%H:%M:%S} · "
+                    f"{', '.join(names) or 'ToneWatch'} · "
                     f"{recording.get('duration_s', 0)} s"
                 )
-                child = BrowseMediaSource(
-                    domain=DOMAIN,
-                    identifier=f"recording/{recording['id']}",
-                    media_class=MediaClass.MUSIC,
-                    media_content_type=MediaType.MUSIC,
-                    title=title,
-                    can_play=True,
-                    can_expand=False,
+                children.append(
+                    _playable(f"recording/{entry_id}/{recording['id']}/{fmt}", title, _mime(fmt))
                 )
-                children.append(child)
-        result.children = children[:MAX_CHILDREN]
-        result.not_shown = max(0, len(children) - MAX_CHILDREN)
+        result.children = children
         return result
 
-    def _toneset_name(self, toneset_id: Any) -> str:
-        for item in self.coordinator.latest_state.get("tonesets", []):
-            if isinstance(item, dict) and item.get("id") == toneset_id:
+    @staticmethod
+    def _toneset_name(coordinator: Any, toneset_id: Any) -> str:
+        for item in coordinator.latest_state.get("tonesets", []):
+            if isinstance(item, dict) and str(item.get("id")) == str(toneset_id):
                 return str(item.get("name", toneset_id))
         return str(toneset_id)
 
     async def async_resolve_media(self, item: MediaSourceItem) -> PlayMedia:
         parts = item.identifier.split("/")
-        if len(parts) != 2 or parts[0] != "recording" or not parts[1].isdigit():
+        if len(parts) < 3 or (not parts[2].isdigit() and parts[0] != "live"):
             raise Unresolvable(f"Unknown ToneWatch media id: {item.identifier}")
-        recording_id = int(parts[1])
-        for call in await self._calls():
-            detail = await self.coordinator._async_api_json("GET", f"/api/calls/{call['id']}")
-            recordings = detail.get("recordings", []) if isinstance(detail, dict) else []
-            if any(
-                isinstance(recording, dict) and recording.get("id") == recording_id
-                for recording in recordings
-            ):
-                break
-        else:
-            raise Unresolvable(f"Unknown ToneWatch recording id: {recording_id}")
-        entry_id = self.coordinator.entry.entry_id
-        return PlayMedia(
-            url=f"/api/tonewatch/media/{entry_id}/{parts[1]}",
-            mime_type="audio/mpeg",
-        )
+        coordinator = self._coordinator(parts[1])
+        if parts[0] == "recording" and len(parts) == 4:
+            return PlayMedia(
+                url=f"/api/tonewatch/media/{parts[1]}/{parts[2]}", mime_type=_mime(parts[3])
+            )
+        if parts[0] == "clip" and len(parts) == 3:
+            return PlayMedia(
+                url=f"/api/tonewatch/clip/{parts[1]}/{parts[2]}", mime_type="audio/mpeg"
+            )
+        if parts[0] == "live" and len(parts) == 3:
+            payload = await coordinator._async_api_json(
+                "POST", f"/api/sources/{quote(parts[2])}/live-url?external=true"
+            )
+            if not isinstance(payload, dict) or not isinstance(payload.get("url"), str):
+                raise Unresolvable("ToneWatch live feed is unavailable")
+            return PlayMedia(
+                url=urljoin(f"{coordinator.base_url}/", payload["url"]), mime_type="audio/mpeg"
+            )
+        raise Unresolvable(f"Unknown ToneWatch media id: {item.identifier}")
 
 
 def _parse_started(call: dict[str, Any]) -> tuple[int, int, int, datetime]:
@@ -194,6 +286,10 @@ class ToneWatchMediaView(HomeAssistantView):
     def __init__(self, hass: HomeAssistant) -> None:
         self.hass = hass
 
+    def upstream_url(self, coordinator: Any, recording_id: str) -> str | None:
+        """Build the upstream URL without putting its token in a client URL."""
+        return recording_url(coordinator.base_url, recording_id)
+
     async def get(
         self, request: web.Request, entry_id: str, recording_id: str
     ) -> web.StreamResponse:
@@ -211,7 +307,7 @@ class ToneWatchMediaView(HomeAssistantView):
         if request.headers.get("If-Range"):
             headers["If-Range"] = request.headers["If-Range"]
         session = async_get_clientsession(self.hass)
-        upstream_url = recording_url(coordinator.base_url, recording_id)
+        upstream_url = self.upstream_url(coordinator, recording_id)
         if upstream_url is None:
             raise web.HTTPNotFound
         try:
@@ -238,10 +334,21 @@ class ToneWatchMediaView(HomeAssistantView):
             raise web.HTTPBadGateway from err
 
 
+class ToneWatchClipView(ToneWatchMediaView):
+    """Proxy discovered-tone evidence clips through Home Assistant."""
+
+    url = "/api/tonewatch/clip/{entry_id}/{recording_id}"
+    name = "api:tonewatch:clip"
+
+    def upstream_url(self, coordinator: Any, recording_id: str) -> str:
+        return f"{coordinator.base_url}/api/discovered-tones/{recording_id}/clip"
+
+
 async def async_get_media_source(hass: HomeAssistant) -> ToneWatchMediaSource:
     """Return the ToneWatch media source and register its proxy view."""
     marker = f"{DOMAIN}_media_view_registered"
     if not hass.data.get(marker):
         hass.http.register_view(ToneWatchMediaView(hass))
+        hass.http.register_view(ToneWatchClipView(hass))
         hass.data[marker] = True
     return ToneWatchMediaSource(hass)

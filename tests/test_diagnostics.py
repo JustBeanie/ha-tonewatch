@@ -56,5 +56,5 @@ async def test_runtime_repairs_create_and_clear_without_diagnostics(
     )
     repairs.async_update_repairs(hass, app_version="0.5.0", disconnected_for=301)
     assert set(created) == {repairs.APP_VERSION_ISSUE, repairs.WEBSOCKET_ISSUE}
-    repairs.async_update_repairs(hass, app_version="0.6.1", disconnected_for=0)
+    repairs.async_update_repairs(hass, app_version="0.6.3", disconnected_for=0)
     assert set(cleared) == {repairs.APP_VERSION_ISSUE, repairs.WEBSOCKET_ISSUE}

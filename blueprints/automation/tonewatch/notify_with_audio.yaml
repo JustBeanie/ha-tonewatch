@@ -3,6 +3,8 @@ blueprint:
   description: Send a mobile notification with a ToneWatch recording. iOS receives an audio attachment; Android receives a link because the Android companion notification attachment does not support arbitrary audio files.
   domain: automation
   source_url: https://github.com/JustBeanie/ha-tonewatch/blob/main/blueprints/automation/tonewatch/notify_with_audio.yaml
+  homeassistant:
+    min_version: "2026.2.0"
   input:
     tone_set_event:
       name: Tone set event entity
@@ -25,15 +27,22 @@ blueprint:
 trigger:
   - platform: state
     entity_id: !input tone_set_event
-    to: recording_ready
+condition:
+  - condition: template
+    value_template: >-
+      {{ trigger.to_state is not none
+         and trigger.to_state.attributes.get('event_type') == 'recording_ready'
+         and trigger.to_state.attributes.get('recording_proxy_url') }}
 action:
-  - service: !input notify_service
+  - action: !input notify_service
     data:
       title: !input notification_title
-      message: "ToneWatch recording ready: {{ trigger.to_state.attributes.recording_proxy_url | default(trigger.to_state.attributes.recording_url) }}"
+      message: ToneWatch recording ready. Tap to open the audio.
       data:
+        url: "{{ trigger.to_state.attributes.recording_proxy_url }}"
+        clickAction: "{{ trigger.to_state.attributes.recording_proxy_url }}"
         attachment:
-          url: "{{ trigger.to_state.attributes.recording_proxy_url | default(trigger.to_state.attributes.recording_url) }}"
-          content-type: audio/mpeg
+          url: "{{ trigger.to_state.attributes.recording_proxy_url }}"
+          content-type: "{{ 'audio/ogg' if trigger.to_state.attributes.get('format') in ['ogg', 'opus'] else 'audio/mpeg' }}"
 mode: queued
 max: 10

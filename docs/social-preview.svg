@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title description">
+  <title id="title">ToneWatch for Home Assistant</title>
+  <desc id="description">ToneWatch waveform logo with the tagline Listen, detect, record.</desc>
+  <rect width="1280" height="640" fill="#101827"/>
+  <rect x="0" y="0" width="16" height="640" fill="#2563eb"/>
+  <circle cx="190" cy="260" r="93" fill="#2563eb"/>
+  <path d="M112 265h37l20-85 38 154 19-69h42" fill="none" stroke="#fff" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="330" y="254" fill="#fff" font-family="Arial, Helvetica, sans-serif" font-size="89" font-weight="700" letter-spacing="-3">ToneWatch</text>
+  <text x="336" y="322" fill="#b9c6da" font-family="Arial, Helvetica, sans-serif" font-size="36">for Home Assistant</text>
+  <path d="M96 439h114l33-43 33 90 29-51h129l28-34 31 79 30-46h135l28-26 28 61h142l27-28 30 63h137" fill="none" stroke="#2563eb" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="99" y="553" fill="#93b4ff" font-family="Arial, Helvetica, sans-serif" font-size="25" letter-spacing="5">LISTEN  ·  DETECT  ·  RECORD</text>
+</svg>

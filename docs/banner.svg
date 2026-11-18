@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="360" viewBox="0 0 1280 360" role="img" aria-labelledby="title description">
+  <title id="title">ToneWatch for Home Assistant</title>
+  <desc id="description">A blue radio waveform beside the ToneWatch name and the words Listen, detect, record.</desc>
+  <rect width="1280" height="360" fill="#101827"/>
+  <rect x="0" y="0" width="12" height="360" fill="#2563eb"/>
+  <circle cx="162" cy="180" r="83" fill="#2563eb"/>
+  <path d="M92 185h35l18-76 33 136 17-60h37" fill="none" stroke="#fff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="292" y="172" fill="#fff" font-family="Arial, Helvetica, sans-serif" font-size="79" font-weight="700" letter-spacing="-3">ToneWatch</text>
+  <text x="296" y="224" fill="#b9c6da" font-family="Arial, Helvetica, sans-serif" font-size="28">for Home Assistant</text>
+  <text x="296" y="278" fill="#93b4ff" font-family="Arial, Helvetica, sans-serif" font-size="20" letter-spacing="3">LISTEN  ·  DETECT  ·  RECORD</text>
+  <path d="M991 82h42l17-41 24 85 21-44h47l15-28 23 52h39" fill="none" stroke="#334968" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M951 186h40l21-32 20 65 23-93 25 91 20-31h79l18-26 24 53h33" fill="none" stroke="#2563eb" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M997 274h46l20-30 20 58 20-41h38l20-18 19 41h38" fill="none" stroke="#334968" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

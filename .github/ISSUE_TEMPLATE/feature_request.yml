@@ -1,0 +1,16 @@
+name: Feature request
+description: Suggest a Home Assistant integration improvement
+title: "Feature: "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What would this help you do?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Suggested Home Assistant behavior
+    validations:
+      required: true

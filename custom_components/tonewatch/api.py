@@ -8,11 +8,12 @@ import random
 import time
 from collections.abc import Awaitable, Callable
 from typing import Any
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import quote, urlsplit, urlunsplit
 
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
@@ -55,6 +56,7 @@ class ToneWatchCoordinator(DataUpdateCoordinator[EventData]):
         entry: ConfigEntry[dict[str, object]],
         *,
         sleep: Sleep = asyncio.sleep,
+        health_sleep: Sleep = asyncio.sleep,
         random_fn: Random = random.random,
     ) -> None:
         super().__init__(
@@ -66,10 +68,17 @@ class ToneWatchCoordinator(DataUpdateCoordinator[EventData]):
         )
         self.entry = entry
         self._sleep = sleep
+        self._health_sleep = health_sleep
         self._random = random_fn
         self._task: asyncio.Task[None] | None = None
+        self._health_task: asyncio.Task[None] | None = None
         self._stopped = asyncio.Event()
-        self.latest_state: EventData = {"events": [], "last_event": None, "by_type": {}}
+        self.latest_state: EventData = {
+            "events": [],
+            "last_event": None,
+            "by_type": {},
+            "recording_events": {},
+        }
         self._connected = False
         self._disconnected_at: float | None = None
 
@@ -105,6 +114,7 @@ class ToneWatchCoordinator(DataUpdateCoordinator[EventData]):
             f"{self.base_url}{path}",
             headers={"Authorization": self.authorization},
             json=json,
+            timeout=aiohttp.ClientTimeout(total=10),
         ) as response:
             response.raise_for_status()
             return await response.json()
@@ -118,6 +128,7 @@ class ToneWatchCoordinator(DataUpdateCoordinator[EventData]):
     async def _async_initial_fetch(self) -> None:
         """Hydrate configuration and health once before the push stream starts."""
         tonesets = await self._async_api_json("GET", "/api/tonesets")
+        configured_sources = await self._async_api_json("GET", "/api/sources")
         health = await self._async_api_json("GET", "/api/admin/health")
         sources = health if isinstance(health, list) else health.get("sources", [])
         health_by_source = {
@@ -131,6 +142,12 @@ class ToneWatchCoordinator(DataUpdateCoordinator[EventData]):
             {
                 "tonesets": tonesets if isinstance(tonesets, list) else [],
                 "sources": sources if isinstance(sources, list) else [],
+                "configured_sources": configured_sources
+                if isinstance(configured_sources, list)
+                else [],
+                "cad_feeds": health.get("cad_feeds", []) if isinstance(health, dict) else [],
+                "outputs": health.get("outputs", []) if isinstance(health, dict) else [],
+                "storage": health.get("storage", {}) if isinstance(health, dict) else {},
                 "health": {
                     source_id: value
                     for source_id, value in health_by_source.items()
@@ -145,6 +162,36 @@ class ToneWatchCoordinator(DataUpdateCoordinator[EventData]):
                 self.latest_state["app_version"] = version
         async_update_repairs(self.hass, self.app_version, self.disconnected_for)
         self.async_set_updated_data(self.latest_state)
+
+    async def _poll_health(self) -> None:
+        """Refresh low-frequency operational data without subscribing to audio telemetry."""
+        while not self._stopped.is_set():
+            await self._health_sleep(60)
+            if self._stopped.is_set():
+                return
+            try:
+                health = await self._async_api_json("GET", "/api/admin/health")
+            except (aiohttp.ClientError, OSError, RuntimeError, TimeoutError):
+                continue
+            if not isinstance(health, dict):
+                continue
+            for key in ("sources", "cad_feeds", "outputs", "storage"):
+                if key in health:
+                    self.latest_state[key] = health[key]
+            for source in health.get("sources", []):
+                if not isinstance(source, dict) or source.get("id") is None:
+                    continue
+                history = source.get("feed_health_history")
+                if isinstance(history, list) and history and isinstance(history[-1], dict):
+                    self.latest_state.setdefault("health", {})[str(source["id"])] = bool(
+                        history[-1].get("healthy")
+                    )
+            build = health.get("build")
+            version = build.get("version") if isinstance(build, dict) else health.get("version")
+            if isinstance(version, str):
+                self.latest_state["app_version"] = version
+            async_update_repairs(self.hass, self.app_version, self.disconnected_for)
+            self.async_set_updated_data(self.latest_state)
 
     async def _async_no_poll(self) -> EventData:
         """Provide the coordinator's initial push-backed value."""
@@ -171,6 +218,10 @@ class ToneWatchCoordinator(DataUpdateCoordinator[EventData]):
             self._stopped.clear()
             try:
                 await self._async_initial_fetch()
+            except aiohttp.ClientResponseError as err:
+                if err.status in (401, 403):
+                    raise ConfigEntryAuthFailed("ToneWatch API token was rejected") from err
+                raise ConfigEntryNotReady("ToneWatch initial API fetch failed") from err
             except (
                 aiohttp.ClientError,
                 OSError,
@@ -178,9 +229,11 @@ class ToneWatchCoordinator(DataUpdateCoordinator[EventData]):
                 TimeoutError,
                 AttributeError,
             ) as err:
-                self.async_set_update_error(err)
-                _LOGGER.warning("ToneWatch initial fetch failed: %s", err)
+                raise ConfigEntryNotReady("ToneWatch initial API fetch failed") from err
             self._task = asyncio.create_task(self._run(), name=f"tonewatch-{self.entry.entry_id}")
+            self._health_task = asyncio.create_task(
+                self._poll_health(), name=f"tonewatch-health-{self.entry.entry_id}"
+            )
 
     async def async_stop(self) -> None:
         """Stop the WebSocket task and release its resources."""
@@ -189,6 +242,10 @@ class ToneWatchCoordinator(DataUpdateCoordinator[EventData]):
             self._task.cancel()
             await asyncio.gather(self._task, return_exceptions=True)
             self._task = None
+        if self._health_task is not None:
+            self._health_task.cancel()
+            await asyncio.gather(self._health_task, return_exceptions=True)
+            self._health_task = None
 
     async def _run(self) -> None:
         """Connect, consume events, and retry with bounded jittered backoff."""
@@ -203,6 +260,7 @@ class ToneWatchCoordinator(DataUpdateCoordinator[EventData]):
                     self._mark_connected()
                     async_update_repairs(self.hass, self.app_version, self.disconnected_for)
                     await websocket.send_json({"type": "subscribe", "topics": EVENT_TOPICS})
+                    await self._async_refresh_config()
                     self.async_set_updated_data(self.latest_state)
                     await self._consume(websocket)
                 if not self._stopped.is_set():
@@ -263,6 +321,8 @@ class ToneWatchCoordinator(DataUpdateCoordinator[EventData]):
         if message_type in {"subscribed", "pong"}:
             return
         event = {"type": message_type, "data": payload.get("data", {})}
+        if message_type == "RecordingStored":
+            await self._resolve_recording_event(event)
         events = self.latest_state.setdefault("events", [])
         if isinstance(events, list):
             events.append(event)
@@ -273,6 +333,52 @@ class ToneWatchCoordinator(DataUpdateCoordinator[EventData]):
         self.latest_state["last_event"] = event
         self._apply_event(event)
         self.async_set_updated_data(self.latest_state)
+
+    async def _resolve_recording_event(self, event: EventData) -> None:
+        """Resolve a committed recording to its tone sets and playable API ID."""
+        data = event.get("data")
+        if (
+            not isinstance(data, dict)
+            or not data.get("call_id")
+            or not isinstance(data.get("recording_id"), int)
+        ):
+            return
+        try:
+            detail = await self._async_api_json(
+                "GET", f"/api/calls/{quote(str(data['call_id']), safe='')}"
+            )
+        except (aiohttp.ClientError, OSError, RuntimeError, TimeoutError) as err:
+            _LOGGER.warning("ToneWatch recording detail unavailable: %s", err)
+            return
+        if not isinstance(detail, dict):
+            return
+        recordings = detail.get("recordings")
+        if not isinstance(recordings, list):
+            return
+        recording = next(
+            (
+                item
+                for item in recordings
+                if isinstance(item, dict) and item.get("id") == data["recording_id"]
+            ),
+            None,
+        )
+        if recording is None:
+            return
+        events = self.latest_state.setdefault("recording_events", {})
+        if not isinstance(events, dict):
+            return
+        tone_sets = detail.get("tone_sets")
+        for tone in tone_sets if isinstance(tone_sets, list) else []:
+            if not isinstance(tone, dict) or not tone.get("toneset_id"):
+                continue
+            events[str(tone["toneset_id"])] = {
+                **data,
+                "agency": tone.get("agency"),
+                "recording_id": recording["id"],
+                "format": recording.get("format", data.get("format", "mp3")),
+                "source_id": detail.get("source_id", data.get("source_id")),
+            }
 
     def _apply_event(self, event: EventData) -> None:
         """Apply a protocol event to the small state projection used by entities."""
@@ -299,14 +405,29 @@ class ToneWatchCoordinator(DataUpdateCoordinator[EventData]):
             health = self.latest_state.setdefault("health", {})
             if isinstance(health, dict) and data.get("source_id") is not None:
                 health[str(data["source_id"])] = bool(data.get("healthy"))
+        elif event_type == "SquelchChanged":
+            for source in self.latest_state.get("sources", []):
+                if isinstance(source, dict) and str(source.get("id")) == str(data.get("source_id")):
+                    source["squelch_open"] = data.get("open")
+        elif event_type == "call_enriched":
+            last_call = self.latest_state.get("last_call", {})
+            if isinstance(last_call, dict) and last_call.get("call_id") == data.get("call_id"):
+                last_call["cad_incident"] = data.get("incident")
         elif event_type == "ConfigChanged":
             self.hass.async_create_task(self._async_refresh_config())
 
     async def _async_refresh_config(self) -> None:
-        """Refresh tone sets after a pushed configuration change."""
+        """Refresh configured entities after a pushed configuration change."""
         try:
             tonesets = await self._async_api_json("GET", "/api/tonesets")
+            sources = await self._async_api_json("GET", "/api/sources")
+            health = await self._async_api_json("GET", "/api/admin/health")
         except (aiohttp.ClientError, OSError, RuntimeError, TimeoutError, AttributeError):
             return
         self.latest_state["tonesets"] = tonesets if isinstance(tonesets, list) else []
+        self.latest_state["configured_sources"] = sources if isinstance(sources, list) else []
+        if isinstance(health, dict):
+            for key in ("sources", "cad_feeds", "outputs", "storage"):
+                if key in health:
+                    self.latest_state[key] = health[key]
         self.async_set_updated_data(self.latest_state)
