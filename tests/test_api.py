@@ -9,7 +9,7 @@ from typing import Any
 import aiohttp
 import pytest
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.tonewatch import api
 from custom_components.tonewatch.const import DOMAIN

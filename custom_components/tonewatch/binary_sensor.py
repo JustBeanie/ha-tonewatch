@@ -6,7 +6,7 @@ from typing import Any, cast
 
 # BinarySensorDeviceClass moved to binary_sensor.const in 2026.x but is still re-exported here;
 # importing from .const would break the 2026.2 minimum.
-from homeassistant.components.binary_sensor import (  # type: ignore[attr-defined]
+from homeassistant.components.binary_sensor import (  # type: ignore[attr-defined,unused-ignore]
     BinarySensorDeviceClass,
     BinarySensorEntity,
 )

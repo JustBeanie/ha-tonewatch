@@ -4,7 +4,7 @@ version = "0.3.0"
 description = "Home Assistant custom integration for ToneWatch"
 requires-python = ">=3.14.2,<3.15"
 dependencies = [
-  "homeassistant==2026.10.4",
+  "homeassistant==2026.11.2",
 ]
 
 [dependency-groups]
@@ -12,7 +12,7 @@ dev = [
   "pytest>=8.3",
   "pytest-asyncio>=0.24",
   "pytest-cov>=6.0",
-  "pytest-homeassistant-custom-component==0.13.375",
+  "pytest-homeassistant==2026.11.2",
   "mypy>=1.13",
   "ruff>=0.8",
 ]
@@ -42,8 +42,15 @@ module = ["homeassistant.*", "aiohttp.*", "voluptuous.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
-addopts = "--strict-markers -W error --allow-unix-socket --cov=custom_components/tonewatch --cov-fail-under=90 --cov-report=term-missing"
+addopts = "-p no:respx --strict-markers --allow-unix-socket --cov=custom_components/tonewatch --cov-fail-under=90 --cov-report=term-missing"
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = [
+  "error",
+  # Upstream import-time deprecations from HA 2026.11's own dependency chain.
+  "ignore:Inheritance class HomeAssistantApplication from web.Application is discouraged:DeprecationWarning",
+  "ignore:'asyncio.iscoroutinefunction' is deprecated:DeprecationWarning:backoff",
+]
 testpaths = ["tests"]
 pythonpath = ["."]
 markers = ["allow_unregistered: test config flow without registering a real integration"]

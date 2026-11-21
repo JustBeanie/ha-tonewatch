@@ -13,7 +13,7 @@ from homeassistant.config_entries import (
     SOURCE_USER,
 )
 from homeassistant.const import CONF_HOST, CONF_PORT
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.tonewatch import config_flow
 from custom_components.tonewatch.const import CONF_API_TOKEN, CONF_INSTANCE_ID, DOMAIN

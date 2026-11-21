@@ -12,7 +12,7 @@ from homeassistant.const import ATTR_RESTORED, STATE_UNAVAILABLE, Platform
 from homeassistant.core import HomeAssistantError
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import entity_registry as er
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.tonewatch import api
 from custom_components.tonewatch.binary_sensor import CadFeedConnectedSensor, SquelchOpenSensor
