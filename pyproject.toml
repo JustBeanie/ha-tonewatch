@@ -42,9 +42,15 @@ module = ["homeassistant.*", "aiohttp.*", "voluptuous.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
-addopts = "-p no:respx --strict-markers -W error --allow-unix-socket --cov=custom_components/tonewatch --cov-fail-under=90 --cov-report=term-missing"
+addopts = "-p no:respx --strict-markers --allow-unix-socket --cov=custom_components/tonewatch --cov-fail-under=90 --cov-report=term-missing"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+filterwarnings = [
+  "error",
+  # Upstream import-time deprecations from HA 2026.11's own dependency chain.
+  "ignore:Inheritance class HomeAssistantApplication from web.Application is discouraged:DeprecationWarning",
+  "ignore:'asyncio.iscoroutinefunction' is deprecated:DeprecationWarning:backoff",
+]
 testpaths = ["tests"]
 pythonpath = ["."]
 markers = ["allow_unregistered: test config flow without registering a real integration"]
