@@ -14,7 +14,7 @@ from aiohttp.test_utils import make_mocked_request
 from homeassistant.components.media_source import Unresolvable
 from homeassistant.components.media_source.models import MediaSourceItem
 from homeassistant.helpers.http import KEY_AUTHENTICATED
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.tonewatch import media_source
 from custom_components.tonewatch.api import ToneWatchCoordinator

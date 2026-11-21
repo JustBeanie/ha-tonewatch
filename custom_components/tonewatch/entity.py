@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, cast
 
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .api import ToneWatchCoordinator
@@ -26,17 +27,17 @@ class ToneWatchEntity(CoordinatorEntity[ToneWatchCoordinator]):
         instance_id = coordinator.entry.data.get("instance_id", coordinator.entry.entry_id)
         instance_label = str(instance_id)
         self._attr_unique_id = "_".join(part for part in (str(instance_id), kind, item_id) if part)
-        self._attr_device_info = {
-            "identifiers": {
+        self._attr_device_info = DeviceInfo(
+            identifiers={
                 (
                     "tonewatch",
                     str(coordinator.entry.data.get("instance_id", coordinator.entry.entry_id)),
                 )
             },
-            "name": f"ToneWatch ({instance_label})",
-            "manufacturer": "ToneWatch",
-            "configuration_url": coordinator.base_url,
-        }
+            name=f"ToneWatch ({instance_label})",
+            manufacturer="ToneWatch",
+            configuration_url=coordinator.base_url,
+        )
 
     @property
     def state_data(self) -> dict[str, Any]:
