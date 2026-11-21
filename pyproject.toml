@@ -4,7 +4,7 @@ version = "0.3.0"
 description = "Home Assistant custom integration for ToneWatch"
 requires-python = ">=3.14.2,<3.15"
 dependencies = [
-  "homeassistant==2026.10.4",
+  "homeassistant==2026.11.2",
 ]
 
 [dependency-groups]
